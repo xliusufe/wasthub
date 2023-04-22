@@ -9,7 +9,7 @@ R package "wasthub" for learning classifier and calculating p-value of the test 
 
 # Usage
 
-   - [x] [wast-manual.pdf](https://github.com/xliusufe/wasthub/blob/master/inst/wasthub-manual.pdf) ---------- Details of the usage of the package.
+   - [x] [wasthub-manual.pdf](https://github.com/xliusufe/wasthub/blob/master/inst/wasthub-manual.pdf) ---------- Details of the usage of the package.
 # Example
     library(wasthub)
 
