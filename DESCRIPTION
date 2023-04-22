@@ -1,0 +1,15 @@
+Package: wasthub
+Type: Package
+Title: Robust change-plane testing and  learning based on Huber loss
+Version: 1.0.1
+Author: Xu Liu [aut,cre]
+Maintainer: Xu Liu <liu.xu@sufe.edu.cn>
+Description: Provide a method to calculate p-value of the test statistic for subgroup detecting in in the robust linear regression. In the paper Liu (2023), we propose a novel U-like statistic by taking the weighted average over the nuisance parametric space. The proposed test statistics not only improve power, but also save dramatically computational time. Many common and useful models are considered, including models with change point or change plane. We propose a novel U-like test statistic to detect multiple change planes in the robust linear regression.
+License: GPL (>= 2)
+Depends: R (>= 3.2.0)
+LazyData: true
+NeedsCompilation: yes
+Repository: github
+URL: https://github.com/xliusufe/wasthub
+Encoding: UTF-8
+Packaged: 2023-04-20 07:41:52 UTC; Xu Liu

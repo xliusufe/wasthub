@@ -1,0 +1,6 @@
+importFrom("stats", "quantile", "residuals", "rnorm", "dnorm", "pnorm", "runif", "sd", "rbinom", "rexp", "median", "qnorm", "lm", "var")
+importFrom("utils", "data")
+useDynLib(wasthub)
+exportPattern("^[[:alpha:]]+")
+export(exams, pvalhuber, estolscp, estolsmcp, esthubcp,
+        esthubmcp, esthubcpBoot, esthubmcpBoot)
