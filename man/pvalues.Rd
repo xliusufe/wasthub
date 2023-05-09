@@ -8,8 +8,8 @@
 }
 
 \usage{
-  pvalhuber(data, method = "wast", isWB = FALSE, B = 1000, K = 1000,
-            isBeta = FALSE, shape1 = 1, shape2 = 1, N0 = 5000, MU = NULL, ZK = NULL)
+  pvalhuber(data, method = "wast", isWB = FALSE, B = 1000, K = 1000, isBeta = FALSE, 
+            shape1 = 1, shape2 = 1, N0 = 5000, MU = NULL, ZK = NULL, isMed = TRUE)
 }
 
 \arguments{
@@ -34,6 +34,8 @@
   \item{MU}{A vector with same length as \eqn{\boldsymbol{U}}, which is the mean of weight to approximate \eqn{\omega_{ij}} for 'wastapprox'. Default is \code{MU = NULL}, in which \code{MU = runif(p3) - 0.5}. }
 
   \item{ZK}{A vector with length \code{N0}, which is normal sample to approximate \eqn{\omega_{ij}} for 'wastapprox'. Default is \code{ZK = NULL}, in which \code{ZK	= rnorm(N0)}. }
+
+  \item{isMed}{A bool value. response's median \code{tau0*median( abs(y - median(y)) )/qnorm(0.75)} is used to get initial \eqn{\tau} if \code{isAda = TRUE}. Residual's median \code{tau0*median( abs(residual - median(residual)) )/qnorm(0.75)} is used to get initial \eqn{\tau} if \code{isAda = FALSE}. Default is \code{isAda = TRUE}.}
 }
 
 \value{
