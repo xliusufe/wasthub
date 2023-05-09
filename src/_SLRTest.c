@@ -380,6 +380,211 @@ SEXP _EST_CATONI(SEXP Y_, SEXP X_, SEXP PARA_INT_, SEXP PARA_DOUBLE_){
 }
 
 //-------------- SST of robust regression --------------------------------
+double Huber_SST0(double *y, double *tx1, double *x, double *z, double *alphahat, double* thetahat, double *resid1,
+		int n, int p11, int p2, int p3, double tau, int maxIter, double tol, int K, int M, double *G, double* theta){
+	int i,j,k,s,t, *subg, maxk=0, count=0, sumsb = 0;
+	double tmp, tmp1, Tn=0.0, Tn0=0.0, Tn_star, pvals;
+	double *score1, *psi, *psin;
+	double *C11, *psi_h, *K1, *Vh, *Tns, *weight;
+
+	subg	= (int*)malloc(sizeof(int)*n);
+	psin	= (double*)malloc(sizeof(double)*p2);
+	psi  	= (double*)malloc(sizeof(double)*n*p2);
+	psi_h  	= (double*)malloc(sizeof(double)*n*p2);
+	score1 	= (double*)malloc(sizeof(double)*n*p11);
+	C11 	= (double*)malloc(sizeof(double)*p11*p11);
+	K1		= (double*)malloc(sizeof(double)*p2*p11);
+	Vh		= (double*)malloc(sizeof(double)*p2*p2);
+	Tns		= (double*)malloc(sizeof(double)*M);
+	weight 	= (double*)malloc(sizeof(double)*n);
+
+
+	for(j=0; j<M; j++){
+		for(i=0; i<n; i++){
+			tmp1 = fabs(G[j*n+i]);
+			if(tmp1 > tau){
+				G[j*n+i] = tau*SGN(G[j*n+i]);
+			}
+		}
+	}
+	for(i=0; i<n; i++){
+		tmp1 = fabs(resid1[i]);
+		if(tmp1 > tau){
+			resid1[i] = tau*SGN(resid1[i]);
+			weight[i] = tau/fabs(tmp1);
+			for(j=0; j<p11; j++){
+				score1[j*n+i] = tx1[j*n+i]*weight[i];
+			}
+		}
+		else{
+			weight[i] = 1.0;
+			for(j=0; j<p11; j++){
+				score1[j*n+i] = tx1[j*n+i];
+			}
+		}
+	}
+
+	for (s = 0; s < p11; s++){
+		for (t = 0; t < p11; t++){
+			tmp = 0.0;
+			for (i = 0; i < n; i++){
+				tmp += tx1[s*n+i]*score1[t*n+i];
+			}
+			C11[s*p11+t] 	= tmp/n;
+		}
+	}
+
+	if(p11==1){
+		C11[0] = 1.0/C11[0];
+	}
+	else{
+		MatrixInvSymmetric(C11, p11);
+	}
+
+	for(i=0; i<n; i++){
+		for(j=0; j<p11; j++){
+			tmp = 0.0;
+			for (s = 0; s < p11; s++){
+				tmp += C11[j*p11+s]*tx1[s*n+i];
+			}
+			score1[j*n+i] = tmp*resid1[i];
+		}
+
+		for(j=0; j<p2; j++){
+			psi[j*n+i] 	= x[j*n+i]*resid1[i];
+		}
+	}
+
+	for(j=0; j< M; j++){
+		Tns[j]	= 0.0;
+	}
+
+	for(k=0; k<K; k++){
+		sumsb 	= 0;
+		if(p3==1){
+			for(i=0; i<n; i++){
+				subg[i] = IDEX(theta[k], z[i]);
+				sumsb += subg[i];
+			}
+		}
+		else{
+			for(i=0; i<n; i++){
+				tmp = 0.0;
+				for (j = 0; j < p3; j++){
+					tmp += z[j*n+i]*theta[k*p3 + j];
+				}
+				subg[i] = IDEX(0.0, tmp);
+				sumsb += subg[i];
+			}
+		}
+
+		if (sumsb==0){
+			continue;
+		}
+		for (s = 0; s < p2; s++){
+			for (t = 0; t < p11; t++){
+				tmp = 0.0;
+				for(i=0; i<n; i++){
+					if(subg[i]){
+						tmp += x[s*n+i]*tx1[t*n+i]*weight[i];
+					}
+				}
+				K1[s*p11+t] = tmp/n;
+			}
+		}
+
+		for (s = 0; s < p2; s++){
+			tmp = 0.0;
+			for(i=0; i<n; i++){
+				tmp += psi[s*n+i]*subg[i];
+				tmp1 = 0.0;
+				for (t = 0; t < p11; t++){
+					tmp1 += K1[s*p11+t]*score1[t*n+i];
+				}
+				psi_h[s*n+i] = psi[s*n+i]*subg[i] - tmp1;
+
+			}
+			psin[s] = tmp;
+		}
+
+		for (s = 0; s < p2; s++){
+			for (t = s; t < p2; t++){
+				tmp = 0.0;
+				for(i=0; i<n; i++){
+					tmp += psi_h[s*n+i]*psi_h[t*n+i];
+				}
+				Vh[s*p2+t] = tmp/n;
+			}
+		}
+		for (s = 1; s < p2; s++){
+			for (t = 0; t < s; t++){
+				Vh[s*p2+t] = Vh[t*p2+s];
+			}
+		}
+
+		if(p2 ==1){
+			Vh[0] = 1.0/Vh[0];
+		}
+		else{
+			MatrixInvSymmetric(Vh, p2);
+		}
+		Tn = 0.0;
+		for (s = 0; s < p2; s++){
+			for (t = 0; t < p2; t++){
+				Tn += psin[s]*Vh[s*p2+t]*psin[t];
+			}
+		}
+
+		if(Tn>Tn0){
+			Tn0 = Tn;
+			maxk = k;
+		}
+		for(j=0; j< M; j++){
+			Tn_star = 0.0;
+			for (s = 0; s < p2; s++){
+				tmp = 0.0;
+				for(i=0; i<n; i++){
+					tmp += psi_h[s*n+i]*G[j*n+i];
+				}
+				psin[s] = tmp;
+			}
+
+
+			for (s = 0; s < p2; s++){
+				for (t = 0; t < p2; t++){
+					Tn_star += psin[s]*Vh[s*p2+t]*psin[t];
+				}
+			}
+			if(Tn_star>Tns[j]){
+				Tns[j] = Tn_star;
+			}
+		}
+	}
+
+	for(j=0; j< M; j++){
+		if(Tn0<=Tns[j]){
+			count++;
+		}
+	}
+	pvals = 1.0*count/M;
+	for(j=0; j<p3; j++){
+		thetahat[j] = theta[maxk*p3 + j];
+	}
+
+
+	free(subg);
+	free(psi);
+	free(score1);
+	free(C11);
+	free(Vh);
+	free(psi_h);
+	free(psin);
+	free(K1);
+	free(Tns);
+	free(weight);
+	return pvals;
+}
+
 double Huber_SST(double *y, double *tx1, double *x, double *z, double *alphahat, double* thetahat, double *resid1,
 		int n, int p11, int p2, int p3, double tau, int maxIter, double tol, int K, int M, double *G, double* theta){
 	int i,j,k,s,t, *subg, maxk=0, count=0, sumsb = 0;
@@ -464,84 +669,85 @@ double Huber_SST(double *y, double *tx1, double *x, double *z, double *alphahat,
 			}
 		}
 
-		if (sumsb>0){
-			for (s = 0; s < p2; s++){
-				for (t = 0; t < p11; t++){
-					tmp = 0.0;
-					for(i=0; i<n; i++){
-						if(subg[i] && fabs(resid1[i])<=tau){
-							tmp += x[s*n+i]*tx1[t*n+i];
-						}
+		if (sumsb==0){
+			continue;
+		}
+		for (s = 0; s < p2; s++){
+			for (t = 0; t < p11; t++){
+				tmp = 0.0;
+				for(i=0; i<n; i++){
+					if(subg[i] && fabs(resid1[i])<=tau){
+						tmp += x[s*n+i]*tx1[t*n+i];
 					}
-					K1[s*p11+t] = tmp/n;
 				}
+				K1[s*p11+t] = tmp/n;
 			}
+		}
 
+		for (s = 0; s < p2; s++){
+			tmp = 0.0;
+			for(i=0; i<n; i++){
+				tmp += psi[s*n+i]*subg[i];
+				tmp1 = 0.0;
+				for (t = 0; t < p11; t++){
+					tmp1 += K1[s*p11+t]*score1[t*n+i];
+				}
+				psi_h[s*n+i] = psi[s*n+i]*subg[i] - tmp1;
+
+			}
+			psin[s] = tmp;
+		}
+
+		for (s = 0; s < p2; s++){
+			for (t = s; t < p2; t++){
+				tmp = 0.0;
+				for(i=0; i<n; i++){
+					tmp += psi_h[s*n+i]*psi_h[t*n+i];
+				}
+				Vh[s*p2+t] = tmp/n;
+			}
+		}
+		for (s = 1; s < p2; s++){
+			for (t = 0; t < s; t++){
+				Vh[s*p2+t] = Vh[t*p2+s];
+			}
+		}
+
+		if(p2 ==1){
+			Vh[0] = 1.0/Vh[0];
+		}
+		else{
+			MatrixInvSymmetric(Vh, p2);
+		}
+		Tn = 0.0;
+		for (s = 0; s < p2; s++){
+			for (t = 0; t < p2; t++){
+				Tn += psin[s]*Vh[s*p2+t]*psin[t];
+			}
+		}
+
+		if(Tn>Tn0){
+			Tn0 = Tn;
+			maxk = k;
+		}
+		for(j=0; j< M; j++){
+			Tn_star = 0.0;
 			for (s = 0; s < p2; s++){
 				tmp = 0.0;
 				for(i=0; i<n; i++){
-					tmp += psi[s*n+i]*subg[i];
-					tmp1 = 0.0;
-					for (t = 0; t < p11; t++){
-						tmp1 += K1[s*p11+t]*score1[t*n+i];
-					}
-					psi_h[s*n+i] = psi[s*n+i]*subg[i] - tmp1;
-
+					tmp += psi_h[s*n+i]*G[j*n+i];
 				}
 				psin[s] = tmp;
 			}
 
-			for (s = 0; s < p2; s++){
-				for (t = s; t < p2; t++){
-					tmp = 0.0;
-					for(i=0; i<n; i++){
-						tmp += psi_h[s*n+i]*psi_h[t*n+i];
-					}
-					Vh[s*p2+t] = tmp/n;
-				}
-			}
-			for (s = 1; s < p2; s++){
-				for (t = 0; t < s; t++){
-					Vh[s*p2+t] = Vh[t*p2+s];
-				}
-			}
 
-			if(p2 ==1){
-				Vh[0] = 1.0/Vh[0];
-			}
-			else{
-				MatrixInvSymmetric(Vh, p2);
-			}
-			Tn = 0.0;
 			for (s = 0; s < p2; s++){
 				for (t = 0; t < p2; t++){
-					Tn += psin[s]*Vh[s*p2+t]*psin[t];
+					Tn_star += psin[s]*Vh[s*p2+t]*psin[t];
 				}
 			}
-
-			if(Tn>Tn0){
-				Tn0 = Tn;
-				maxk = k;
-			}
-			for(j=0; j< M; j++){
-				Tn_star = 0.0;
-				for (s = 0; s < p2; s++){
-					tmp = 0.0;
-					for(i=0; i<n; i++){
-						tmp += psi_h[s*n+i]*G[j*n+i];
-					}
-					psin[s] = tmp;
-				}
-
-
-				for (s = 0; s < p2; s++){
-					for (t = 0; t < p2; t++){
-						Tn_star += psin[s]*Vh[s*p2+t]*psin[t];
-					}
-				}
-				if(Tn_star>Tns[j]){
-					Tns[j] = Tn_star;
-				}
+			if(Tn_star>Tns[j]){
+				Tns[j] = Tn_star;
 			}
 		}
 	}
@@ -603,6 +809,231 @@ SEXP _HUBER_SST(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESIDS, SEXP THETA, SEXP G
 	setAttrib(list, R_NamesSymbol, 	list_names);
 
 	UNPROTECT(5);
+	return list;
+}
+
+//-------------- SLR of robust regression --------------------------------
+void Huber_SLR(double *pvals, double *y, double *tx, double *x, double *z, double *resids, double tau, double *theta, double* G, double *thetahat,
+		int n, int p, int p2, int p3, int K, int M, int maxstep, double tol){
+	int i,j,k,s,t,p11=p+p2,*subg,sumsb=0,count=0,maxk=0;
+	double tmp1, Tn0;
+	double *psi0, *psi1, *psi2, *psin, *C11, *alpha0, *Tns, *I0, *In, *weight;
+
+	subg	= (int*)malloc(sizeof(int)*n);
+	weight 	= (double*)malloc(sizeof(double)*n);
+	alpha0 	= (double*)malloc(sizeof(double)*p11);
+	Tns		= (double*)malloc(sizeof(double)*M);
+	psi0 	= (double*)malloc(sizeof(double)*n*p11);
+	psi1 	= (double*)malloc(sizeof(double)*n*p11);
+	psi2 	= (double*)malloc(sizeof(double)*n*p11);
+	psin 	= (double*)malloc(sizeof(double)*p11);
+	C11 	= (double*)malloc(sizeof(double)*p11*p11);
+	I0		= (double*)malloc(sizeof(double)*p*p);
+	In 		= (double*)malloc(sizeof(double)*p11*p11);
+
+
+	for(j=0; j<M; j++){
+		for(i=0; i<n; i++){
+			tmp1 = fabs(G[j*n+i]);
+			if(tmp1 > tau){
+				G[j*n+i] = tau*SGN(G[j*n+i]);
+			}
+		}
+	}
+	for(i=0; i<n; i++){
+		tmp1 = fabs(resids[i]);
+		if(tmp1 > tau){
+			resids[i] = tau*SGN(resids[i]);
+			weight[i] = tau/fabs(tmp1);
+		}
+		else{
+			weight[i] = 1.0;
+		}
+	}
+	for(i=0; i<n; i++){
+		weight[i] = sqrt(weight[i]);
+	}
+
+	for(j=0; j < p; j++){
+		for(k=0; k < p; k++){
+			tmp1 = 0.0;
+			for(i=0; i<n; i++){
+				tmp1 += tx[j*n+i]*tx[k*n+i]*weight[i];
+			}
+			I0[j*p+k] = tmp1;
+		}
+	}
+	MatrixInvSymmetric(I0,p);
+
+	for(j=0; j<p; j++){
+		for(i=0; i<n; i++){
+			psi0[j*n+i]	= tx[j*n+i]*resids[i];
+			psi1[j*n+i]	= tx[j*n+i]*weight[i];
+			psi2[j*n+i]	= tx[j*n+i];
+		}
+	}
+
+	for(j=0; j< M; j++){
+		Tns[j]	= 0.0;
+	}
+	Tn0 = -1000000.0;
+	for(k=0; k<K; k++){
+		sumsb 	= 0;
+		if(p3==1){
+			for(i=0; i<n; i++){
+				subg[i] = IDEX(theta[k], z[i]);
+				sumsb += subg[i];
+			}
+		}
+		else{
+			for(i=0; i<n; i++){
+				tmp1 = 0.0;
+				for (s = 0; s < p3; s++){
+					tmp1 += z[s*n+i]*theta[k*p3 + s];
+				}
+				subg[i] = IDEX(0.0, tmp1);
+				sumsb += subg[i];
+			}
+		}
+
+		if (sumsb==0){
+			continue;
+		}
+		for(i=0; i<n; i++){
+			if(subg[i]){
+				for(j=0; j<p2; j++){
+					psi0[(j+p)*n+i]	= x[j*n+i]*resids[i];
+					psi1[(j+p)*n+i]	= x[j*n+i]*weight[i];
+					psi2[(j+p)*n+i]	= x[j*n+i];
+				}
+			}
+			else{
+				for(j=0; j<p2; j++){
+					psi0[(j+p)*n+i]	= 0.0;
+					psi1[(j+p)*n+i]	= 0.0;
+					psi2[(j+p)*n+i]	= 0.0;
+				}
+			}
+		}
+
+		for (s = 0; s < p11; s++){
+			for (t = s; t < p11; t++){
+				tmp1 = 0.0;
+				for(i=0; i<n; i++){
+					tmp1 += psi1[s*n+i]*psi1[t*n+i];
+				}
+				In[s*p11+t] = tmp1;
+			}
+		}
+		for (s = 1; s < p11; s++){
+			for (t = 0; t < s; t++){
+				In[s*p11+t] = In[t*p11+s];
+			}
+		}
+
+		MatrixInvSymmetric(In, p11);
+
+		for (s = 0; s < p; s++){
+			for (t = 0; t < p; t++){
+				In[s*p11+t] -= I0[s*p+t];
+			}
+		}
+
+		for (s = 0; s < p11; s++){
+			tmp1 = 0.0;
+			for(i=0; i<n; i++){
+				tmp1 += psi0[s*n+i];
+			}
+			psin[s] = tmp1;
+		}
+		tmp1 = 0.0;
+		for (s = 0; s < p11; s++){
+			for (t = 0; t < p11; t++){
+				tmp1 += psin[s]*In[s*p11+t]*psin[t];
+			}
+		}
+
+
+		if(tmp1 > Tn0){
+			Tn0 = tmp1;
+			maxk = k;
+		}
+
+		for(j=0; j< M; j++){
+			for (s = 0; s < p11; s++){
+				tmp1 = 0.0;
+				for(i=0; i<n; i++){
+					tmp1 += psi2[s*n+i]*G[j*n+i];
+				}
+				psin[s] = tmp1;
+			}
+			tmp1 = 0.0;
+			for (s = 0; s < p11; s++){
+				for (t = 0; t < p11; t++){
+					tmp1 += psin[s]*In[s*p11+t]*psin[t];
+				}
+			}
+
+			if(tmp1 > Tns[j]){
+				Tns[j] = tmp1;
+			}
+		}
+	}
+
+	for(j=0; j< M; j++){
+		if(Tn0<=Tns[j]){
+			count++;
+		}
+	}
+	pvals[0] = 1.0*count/M;
+
+	for(j=0; j<p3; j++){
+		thetahat[j] = theta[maxk*p3 + j];
+	}
+
+	free(subg);
+	free(alpha0);
+	free(weight);
+	free(Tns);
+	free(psi0);
+	free(psi1);
+	free(psi2);
+	free(psin);
+	free(C11);
+	free(I0);
+	free(In);
+}
+
+SEXP _HUBER_SLR(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESIDS, SEXP THETA, SEXP G, SEXP DIMs, SEXP PARAMS){
+	int n, p1, p2, p3, K, M, maxstep;
+	double tol, tau;
+	n 		= INTEGER(DIMs)[0];
+	p1		= INTEGER(DIMs)[1];
+	p2 		= INTEGER(DIMs)[2];
+	p3 		= INTEGER(DIMs)[3];
+	K 		= INTEGER(DIMs)[4];
+	M 		= INTEGER(DIMs)[5];
+	maxstep = INTEGER(DIMs)[6];
+
+	tau 	= REAL(PARAMS)[0];
+	tol		= REAL(PARAMS)[1];
+
+	SEXP rpvals, rthetahat, list, list_names;
+  	PROTECT(rpvals 		= allocVector(REALSXP, 	2));
+	PROTECT(rthetahat	= allocVector(REALSXP, 	p3));
+	PROTECT(list 		= allocVector(VECSXP, 	2));
+	PROTECT(list_names 	= allocVector(STRSXP, 	2));
+
+	Huber_SLR(REAL(rpvals), REAL(Y), REAL(tX), REAL(X), REAL(Z), REAL(RESIDS), tau, REAL(THETA), REAL(G), REAL(rthetahat),
+			n, p1, p2, p3, K, M, maxstep, tol);
+
+	SET_STRING_ELT(list_names, 	0,	mkChar("pvals"));
+	SET_STRING_ELT(list_names, 	1,	mkChar("theta"));
+	SET_VECTOR_ELT(list, 		0, 	rpvals);
+	SET_VECTOR_ELT(list, 		1, 	rthetahat);
+	setAttrib(list, R_NamesSymbol, 	list_names);
+
+	UNPROTECT(4);
 	return list;
 }
 
@@ -1049,331 +1480,6 @@ SEXP _HUBER_WAST_APPROX(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESID0, SEXP Z_K, 
 	setAttrib(list, R_NamesSymbol, 	list_names);
 
 	UNPROTECT(5);
-	return list;
-}
-
-//-------------- SLR of robust regression --------------------------------
-double EstHuber(double *x, double *y, double *beta, double *residual, double *weight, double *hess, double qq, int n, int p, int maxstep, double eps, double sigma){
-	int i,j,k, step=0;
-	double *beta0, *qy, *dpsi;
-	double tmp, bnorm, yk, wk, loglokl=0.0;
-
-	beta0 	= (double*)malloc(sizeof(double)*p);
-	qy 		= (double*)malloc(sizeof(double)*p);
-	dpsi 	= (double*)malloc(sizeof(double)*n*p);
-
-	yk = 0.0;
-	for(i=0;i<n;i++)	yk += y[i];
-	yk /= n;
-	for(j=0;j<p;j++)	beta0[j] 	= 0.0;
-	for(i=0;i<n;i++)	residual[i]	= y[i] - yk;
-
-	while (step < maxstep){
-		step++;
-
-		for(j=0;j<p;j++) qy[j] = 0.0;
-		for(i=0;i<n;i++){
-			tmp = residual[i]/qq;
-			if(fabs(tmp)>1.414214){
-				yk = SGN(tmp)*0.942809;
-				wk = 0.0;
-			}
-			else{
-				yk = qq*tmp*( 1.0 - tmp*tmp/6);
-				wk = 1.0 - 0.5*tmp*tmp;
-			}
-			for(j=0;j<p;j++){
-				qy[j] 	+= x[j*n+i]*yk;
-				dpsi[j*n+i] = x[j*n+i]*wk;
-			}
-		}
-		for(j=0; j < p; j++){
-			for(k=0; k < p; k++){
-				tmp = 0.0;
-				for(i=0; i<n; i++){
-					tmp += x[j*n+i]*dpsi[k*n+i];
-				}
-				hess[j*p+k] = tmp;
-			}
-		}
-		MatrixInvSymmetric(hess,p);
-    	AbyB(beta, hess, qy, p, p, 1);
-
-		bnorm = 0.0;
-		for(j=0;j<p;j++){
-			tmp = beta[j];
-			bnorm += tmp*tmp;
-		}
-
-		if(sqrt(bnorm)<eps){
-			break;
-		}
-		else{
-			for(j=0;j<p;j++)	beta0[j] += beta[j];
-			for(i=0;i<n;i++){
-				tmp = 0.0;
-				for(j=0;j<p;j++) tmp += x[j*n+i]*beta0[j];
-				residual[i] = y[i] - tmp;
-				loglokl += 0.5*residual[i]*residual[i]*IDEX(residual[i], qq) + (qq*fabs(residual[i])-0.5*qq*qq)*IDEX(qq, residual[i]);
-			}
-		}
-	}
-
-	for(j=0; j < p; j++){
-		beta[j] = beta0[j];
-	}
-	for(i=0;i<n;i++){
-		tmp = 0.0;
-		for(j=0;j<p;j++) tmp += x[j*n+i]*beta[j];
-		tmp = (y[i] - tmp)/qq;
-		if(fabs(tmp)>1.414214){
-			residual[i] = SGN(tmp)*0.942809;
-			weight[i] = 0.0;
-		}
-		else{
-			residual[i] = qq*tmp*( 1.0 - tmp*tmp/6);
-			weight[i] = 1.0 - 0.5*tmp*tmp;
-		}
-	}
-
-	for(j=0; j < p; j++){
-		for(k=0; k < p; k++){
-			tmp = 0.0;
-			for(i=0; i<n; i++){
-				tmp += x[j*n+i]*x[k*n+i]*weight[i];
-			}
-			hess[j*p+k] = tmp;
-		}
-	}
-	MatrixInvSymmetric(hess,p);
-
-	free(beta0);
-	free(dpsi);
-	free(qy);
-	return -2.0*loglokl;
-}
-
-void Huber_SLR(double *pvals, double *y, double *tx, double *x, double *z, double *resids, double tau, double *theta, double* G, double *thetahat,
-		int n, int p, int p2, int p3, int K, int M, int maxstep, double tol){
-	int i,j,k,s,t,p11=p+p2,*subg,sumsb=0,count=0,maxk=0;
-	double tmp1, Tn0;
-	double *psi0, *psi1, *psi2, *psin, *C11, *alpha0, *Tns, *I0, *In, *weight;
-
-	subg	= (int*)malloc(sizeof(int)*n);
-	weight 	= (double*)malloc(sizeof(double)*n);
-	alpha0 	= (double*)malloc(sizeof(double)*p11);
-	Tns		= (double*)malloc(sizeof(double)*M);
-	psi0 	= (double*)malloc(sizeof(double)*n*p11);
-	psi1 	= (double*)malloc(sizeof(double)*n*p11);
-	psi2 	= (double*)malloc(sizeof(double)*n*p11);
-	psin 	= (double*)malloc(sizeof(double)*p11);
-	C11 	= (double*)malloc(sizeof(double)*p11*p11);
-	I0		= (double*)malloc(sizeof(double)*p*p);
-	In 		= (double*)malloc(sizeof(double)*p11*p11);
-
-
-	for(j=0; j<M; j++){
-		for(i=0; i<n; i++){
-			tmp1 = fabs(G[j*n+i]);
-			if(tmp1 > tau){
-				G[j*n+i] = tau*SGN(G[j*n+i]);
-			}
-		}
-	}
-	for(i=0; i<n; i++){
-		tmp1 = fabs(resids[i]);
-		if(tmp1 > tau){
-			resids[i] = tau*SGN(resids[i]);
-			weight[i] = tau/fabs(tmp1);
-		}
-		else{
-			weight[i] = 1.0;
-		}
-	}
-	for(i=0; i<n; i++){
-		weight[i] = sqrt(weight[i]);
-	}
-
-	for(j=0; j < p; j++){
-		for(k=0; k < p; k++){
-			tmp1 = 0.0;
-			for(i=0; i<n; i++){
-				tmp1 += tx[j*n+i]*tx[k*n+i]*weight[i];
-			}
-			I0[j*p+k] = tmp1;
-		}
-	}
-	MatrixInvSymmetric(I0,p);
-
-	for(j=0; j<p; j++){
-		for(i=0; i<n; i++){
-			psi0[j*n+i]	= tx[j*n+i]*resids[i];
-			psi1[j*n+i]	= tx[j*n+i]*weight[i];
-			psi2[j*n+i]	= tx[j*n+i];
-		}
-	}
-
-	for(j=0; j< M; j++){
-		Tns[j]	= 0.0;
-	}
-	Tn0 = -1000000.0;
-	for(k=0; k<K; k++){
-		sumsb 	= 0;
-		if(p3==1){
-			for(i=0; i<n; i++){
-				subg[i] = IDEX(theta[k], z[i]);
-				sumsb += subg[i];
-			}
-		}
-		else{
-			for(i=0; i<n; i++){
-				tmp1 = 0.0;
-				for (s = 0; s < p3; s++){
-					tmp1 += z[s*n+i]*theta[k*p3 + s];
-				}
-				subg[i] = IDEX(0.0, tmp1);
-				sumsb += subg[i];
-			}
-		}
-
-		if (sumsb>0){
-			for(i=0; i<n; i++){
-				if(subg[i]){
-					for(j=0; j<p2; j++){
-						psi0[(j+p)*n+i]	= x[j*n+i]*resids[i];
-						psi1[(j+p)*n+i]	= x[j*n+i]*weight[i];
-						psi2[(j+p)*n+i]	= x[j*n+i];
-					}
-				}
-				else{
-					for(j=0; j<p2; j++){
-						psi0[(j+p)*n+i]	= 0.0;
-						psi1[(j+p)*n+i]	= 0.0;
-						psi2[(j+p)*n+i]	= 0.0;
-					}
-				}
-			}
-
-			for (s = 0; s < p11; s++){
-				for (t = s; t < p11; t++){
-					tmp1 = 0.0;
-					for(i=0; i<n; i++){
-						tmp1 += psi1[s*n+i]*psi1[t*n+i];
-					}
-					In[s*p11+t] = tmp1;
-				}
-			}
-			for (s = 1; s < p11; s++){
-				for (t = 0; t < s; t++){
-					In[s*p11+t] = In[t*p11+s];
-				}
-			}
-
-			MatrixInvSymmetric(In, p11);
-
-			for (s = 0; s < p; s++){
-				for (t = 0; t < p; t++){
-					In[s*p11+t] -= I0[s*p+t];
-				}
-			}
-
-			for (s = 0; s < p11; s++){
-				tmp1 = 0.0;
-				for(i=0; i<n; i++){
-					tmp1 += psi0[s*n+i];
-				}
-				psin[s] = tmp1;
-			}
-			tmp1 = 0.0;
-			for (s = 0; s < p11; s++){
-				for (t = 0; t < p11; t++){
-					tmp1 += psin[s]*In[s*p11+t]*psin[t];
-				}
-			}
-
-
-			if(tmp1 > Tn0){
-				Tn0 = tmp1;
-				maxk = k;
-			}
-
-			for(j=0; j< M; j++){
-				for (s = 0; s < p11; s++){
-					tmp1 = 0.0;
-					for(i=0; i<n; i++){
-						tmp1 += psi2[s*n+i]*G[j*n+i];
-					}
-					psin[s] = tmp1;
-				}
-				tmp1 = 0.0;
-				for (s = 0; s < p11; s++){
-					for (t = 0; t < p11; t++){
-						tmp1 += psin[s]*In[s*p11+t]*psin[t];
-					}
-				}
-
-				if(tmp1 > Tns[j]){
-					Tns[j] = tmp1;
-				}
-			}
-
-		}
-	}
-
-	for(j=0; j< M; j++){
-		if(Tn0<=Tns[j]){
-			count++;
-		}
-	}
-	pvals[0] = 1.0*count/M;
-
-	for(j=0; j<p3; j++){
-		thetahat[j] = theta[maxk*p3 + j];
-	}
-
-	free(subg);
-	free(alpha0);
-	free(weight);
-	free(Tns);
-	free(psi0);
-	free(psi1);
-	free(psi2);
-	free(psin);
-	free(C11);
-	free(I0);
-	free(In);
-}
-
-SEXP _HUBER_SLR(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESIDS, SEXP THETA, SEXP G, SEXP DIMs, SEXP PARAMS){
-	int n, p1, p2, p3, K, M, maxstep;
-	double tol, tau;
-	n 		= INTEGER(DIMs)[0];
-	p1		= INTEGER(DIMs)[1];
-	p2 		= INTEGER(DIMs)[2];
-	p3 		= INTEGER(DIMs)[3];
-	K 		= INTEGER(DIMs)[4];
-	M 		= INTEGER(DIMs)[5];
-	maxstep = INTEGER(DIMs)[6];
-
-	tau 	= REAL(PARAMS)[0];
-	tol		= REAL(PARAMS)[1];
-
-	SEXP rpvals, rthetahat, list, list_names;
-  	PROTECT(rpvals 		= allocVector(REALSXP, 	2));
-	PROTECT(rthetahat	= allocVector(REALSXP, 	p3));
-	PROTECT(list 		= allocVector(VECSXP, 	2));
-	PROTECT(list_names 	= allocVector(STRSXP, 	2));
-
-	Huber_SLR(REAL(rpvals), REAL(Y), REAL(tX), REAL(X), REAL(Z), REAL(RESIDS), tau, REAL(THETA), REAL(G), REAL(rthetahat),
-			n, p1, p2, p3, K, M, maxstep, tol);
-
-	SET_STRING_ELT(list_names, 	0,	mkChar("pvals"));
-	SET_STRING_ELT(list_names, 	1,	mkChar("theta"));
-	SET_VECTOR_ELT(list, 		0, 	rpvals);
-	SET_VECTOR_ELT(list, 		1, 	rthetahat);
-	setAttrib(list, R_NamesSymbol, 	list_names);
-
-	UNPROTECT(4);
 	return list;
 }
 

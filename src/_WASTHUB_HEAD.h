@@ -64,6 +64,8 @@ double EstCatoniR1(double *y, double *residual, double tau, const int n);
 
 void EstCatoniR(double *x, double *y, double *beta, double *residual, double qq, int n, int p, int maxstep, double eps);
 
+double EstHuber(double *x, double *y, double *beta, double *residual, double *weight, double *hess, double qq, int n, int p, int maxstep, double eps, double sigma);
+
 double EstHuberR1(double *y, double *residual, double tau, const int n);
 
 double EstHuberR(double *x, double *y1, double *beta, double *residual, double qq, double tau0, int n, int p, int maxstep, double eps);

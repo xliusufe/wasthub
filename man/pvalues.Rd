@@ -8,7 +8,7 @@
 }
 
 \usage{
-  pvalhuber(data, method = "wast", isAda = TRUE, isWB = FALSE, B = 1000, K = 1000,
+  pvalhuber(data, method = "wast", isWB = FALSE, B = 1000, K = 1000,
             isBeta = FALSE, shape1 = 1, shape2 = 1, N0 = 5000, MU = NULL, ZK = NULL)
 }
 
@@ -16,8 +16,6 @@
   \item{data}{A list, including \eqn{Y} (response), \eqn{X} (baseline variable), \eqn{Z} (grouping difference variable), and \eqn{U} (grouping variable).}
 
   \item{method}{There are there methods, including the proposed 'wast', 'wastcv', 'wastapprox', 'sst', and 'slrt'.}
-
-  \item{isAda}{A bool value. Adaptive huber estimation is used if \code{isAda = TRUE}. Default is \code{isAda = FALSE}.}
 
   \item{isWB}{A bool value. The wild bootstrap method is used if \code{isWB = TRUE}. Default is \code{isWB = FALSE}.}
 

@@ -99,6 +99,7 @@ EstTn_Huber_wast <- function(data, isAda = TRUE, isWB = FALSE, isBeta = 0, shape
 	tau0 	= 1.345
 	if(isAda){
 		tau1 	= -1
+		tau0 	= tau0/qnorm(0.75)
 	}
 	else{
 		tau1 	= tau0*median( abs(y - median(y)) )/qnorm(0.75)
@@ -114,8 +115,7 @@ EstTn_Huber_wast <- function(data, isAda = TRUE, isWB = FALSE, isBeta = 0, shape
 			)
 
 	tau 	= fit$tau
-	alphahat = fit$coef
-	muhat 	= tx%*%alphahat
+	muhat 	= tx%*%fit$coef
 	resids 	= y - muhat
 
 	params 	= c(tau, shape1, shape2, tol)
@@ -362,8 +362,9 @@ EstTn_Huber_approx <- function(data, isAda = TRUE, isWB = FALSE, isBeta = 0, sha
 	return(pvals)
 }
 
-pvalhuber <- function(data, method = "wast", isAda = TRUE, isWB = FALSE, B = 1000, K = 1000, isBeta = FALSE, shape1 = 1, shape2 = 1, N0 = 5000, MU = NULL, ZK = NULL){
-	isBeta = ifelse(isBeta, 1, 0)
+pvalhuber <- function(data, method = "wast", isWB = FALSE, B = 1000, K = 1000, isBeta = FALSE, shape1 = 1, shape2 = 1, N0 = 5000, MU = NULL, ZK = NULL){
+	isBeta	= ifelse(isBeta, 1, 0)
+	isAda 	= TRUE
 
 	if(method=='wast') {
 	   pvals  	= EstTn_Huber_wast(data, isAda = isAda, isWB = isWB, isBeta = isBeta, shape1 = shape1, shape2 = shape2, K = K, M = B)

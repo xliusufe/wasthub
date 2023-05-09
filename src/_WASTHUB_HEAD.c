@@ -689,6 +689,106 @@ void EstCatoniR(double *x, double *y, double *beta, double *residual, double qq,
 	free(hess);
 }
 
+double EstHuber(double *x, double *y, double *beta, double *residual, double *weight, double *hess, double qq, int n, int p, int maxstep, double eps, double sigma){
+	int i,j,k, step=0;
+	double *beta0, *qy, *dpsi;
+	double tmp, bnorm, yk, wk, loglokl=0.0;
+
+	beta0 	= (double*)malloc(sizeof(double)*p);
+	qy 		= (double*)malloc(sizeof(double)*p);
+	dpsi 	= (double*)malloc(sizeof(double)*n*p);
+
+	yk = 0.0;
+	for(i=0;i<n;i++)	yk += y[i];
+	yk /= n;
+	for(j=0;j<p;j++)	beta0[j] 	= 0.0;
+	for(i=0;i<n;i++)	residual[i]	= y[i] - yk;
+
+	while (step < maxstep){
+		step++;
+
+		for(j=0;j<p;j++) qy[j] = 0.0;
+		for(i=0;i<n;i++){
+			tmp = residual[i]/qq;
+			if(fabs(tmp)>1.414214){
+				yk = SGN(tmp)*0.942809;
+				wk = 0.0;
+			}
+			else{
+				yk = qq*tmp*( 1.0 - tmp*tmp/6);
+				wk = 1.0 - 0.5*tmp*tmp;
+			}
+			for(j=0;j<p;j++){
+				qy[j] 	+= x[j*n+i]*yk;
+				dpsi[j*n+i] = x[j*n+i]*wk;
+			}
+		}
+		for(j=0; j < p; j++){
+			for(k=0; k < p; k++){
+				tmp = 0.0;
+				for(i=0; i<n; i++){
+					tmp += x[j*n+i]*dpsi[k*n+i];
+				}
+				hess[j*p+k] = tmp;
+			}
+		}
+		MatrixInvSymmetric(hess,p);
+    	AbyB(beta, hess, qy, p, p, 1);
+
+		bnorm = 0.0;
+		for(j=0;j<p;j++){
+			tmp = beta[j];
+			bnorm += tmp*tmp;
+		}
+
+		if(sqrt(bnorm)<eps){
+			break;
+		}
+		else{
+			for(j=0;j<p;j++)	beta0[j] += beta[j];
+			for(i=0;i<n;i++){
+				tmp = 0.0;
+				for(j=0;j<p;j++) tmp += x[j*n+i]*beta0[j];
+				residual[i] = y[i] - tmp;
+				loglokl += 0.5*residual[i]*residual[i]*IDEX(residual[i], qq) + (qq*fabs(residual[i])-0.5*qq*qq)*IDEX(qq, residual[i]);
+			}
+		}
+	}
+
+	for(j=0; j < p; j++){
+		beta[j] = beta0[j];
+	}
+	for(i=0;i<n;i++){
+		tmp = 0.0;
+		for(j=0;j<p;j++) tmp += x[j*n+i]*beta[j];
+		tmp = (y[i] - tmp)/qq;
+		if(fabs(tmp)>1.414214){
+			residual[i] = SGN(tmp)*0.942809;
+			weight[i] = 0.0;
+		}
+		else{
+			residual[i] = qq*tmp*( 1.0 - tmp*tmp/6);
+			weight[i] = 1.0 - 0.5*tmp*tmp;
+		}
+	}
+
+	for(j=0; j < p; j++){
+		for(k=0; k < p; k++){
+			tmp = 0.0;
+			for(i=0; i<n; i++){
+				tmp += x[j*n+i]*x[k*n+i]*weight[i];
+			}
+			hess[j*p+k] = tmp;
+		}
+	}
+	MatrixInvSymmetric(hess,p);
+
+	free(beta0);
+	free(dpsi);
+	free(qy);
+	return -2.0*loglokl;
+}
+
 double EstHuberR1(double *y, double *residual, double tau, const int n){
 	int i;
 	double beta=0.0;
