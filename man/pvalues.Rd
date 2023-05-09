@@ -35,7 +35,7 @@
 
   \item{ZK}{A vector with length \code{N0}, which is normal sample to approximate \eqn{\omega_{ij}} for 'wastapprox'. Default is \code{ZK = NULL}, in which \code{ZK	= rnorm(N0)}. }
 
-  \item{isMed}{A bool value. response's median \code{tau0*median( abs(y - median(y)) )/qnorm(0.75)} is used to get initial \eqn{\tau} if \code{isAda = TRUE}. Residual's median \code{tau0*median( abs(residual - median(residual)) )/qnorm(0.75)} is used to get initial \eqn{\tau} if \code{isAda = FALSE}. Default is \code{isAda = TRUE}.}
+  \item{isMed}{A bool value. Residual's median \code{tau0*median( abs(residual - median(residual)) )/qnorm(0.75)} is used to get initial \eqn{\tau} if \code{isAda = TRUE}. Response's median \code{tau0*median( abs(y - median(y)) )/qnorm(0.75)} is used to get initial \eqn{\tau} if \code{isAda = FALSE}. Default is \code{isAda = TRUE}.}
 }
 
 \value{
