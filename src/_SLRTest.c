@@ -1203,7 +1203,7 @@ double Huber_single(double *Tns, double *y, double *tx, double *x, double *z, do
 	for(g=0;g<M;g++){
 		Tn = 0.0;
 		for(i=0; i<n; i++){
-			yb[i] = y[n+g*n+i];
+			yb[i] = y[g*n+i];
 		}
 		EstHuber2(tx, yb, alphahat, resid, tau, n, p, maxIter, tol);
 		for (i = 0; i < n-1; i++) {
@@ -1222,7 +1222,7 @@ double Huber_single(double *Tns, double *y, double *tx, double *x, double *z, do
 	return 2.0*Tn0/n;
 }
 
-double Huber_multiple(double *Tns, double *y, double *tx, double *x, double *z, double *resid0, double *alphahat, int n, int p, int p2, int p3,
+double Huber_multiple0(double *Tns, double *y, double *tx, double *x, double *z, double *resid0, double *alphahat, int n, int p, int p2, int p3,
 		int M, double tau, double shape1, double shape2, int maxIter, double tol){
 	int i,j,s,g;
 	double tmp, omega=0.0, Tn, Tn0=0.0, rho, sd, xij;
@@ -1239,6 +1239,266 @@ double Huber_multiple(double *Tns, double *y, double *tx, double *x, double *z, 
 			resid0[i] = tau*SGN(resid0[i]);
 		}
 	}
+
+	for(i=0; i<n; i++){
+		sd = 0.0;
+		for(j=0; j<p3; j++){
+			sd += z[j*n+i]*z[j*n+i];
+		}
+		sd = 1.0/sqrt(sd);
+		for(j=0; j<p3; j++){
+			stdx[j*n+i] = z[j*n+i]*sd;
+		}
+	}
+
+	for (i = 0; i < n-1; i++) {
+		for (j = i+1; j < n; j++) {
+			xij = 0.0;
+			for (s = 0; s < p2; s++) {
+				xij += x[s*n+i]*x[s*n+j];
+			}
+			rho = 0.0;
+			for (s = 0; s < p3; s++) {
+				rho += stdx[s*n+i]*stdx[s*n+j];
+			}
+
+			if(1-rho*rho < MEPS){
+				omega = 0.5;
+			}
+			else{
+				omega = 0.25 + atan(rho/sqrt(1-rho*rho))*MPI1;
+			}
+			OMEGA[i*n+j]	= omega*xij;
+			Tn0 	+= OMEGA[i*n+j]*resid0[i]*resid0[j];
+		}
+	}
+
+	for(g=0;g<M;g++){
+		Tn = 0.0;
+		for(i=0; i<n; i++){
+			yb[i] = y[g*n+i];
+		}
+		EstHuber2(tx, yb, alphahat, resid, tau, n, p, maxIter, tol);
+		for (i = 0; i < n-1; i++) {
+			for (j = i+1; j < n; j++) {
+				Tn 	+= OMEGA[i*n+j]*resid[i]*resid[j];
+			}
+		}
+
+		Tns[g] = 2.0*Tn/n;
+	}
+
+	free(yb);
+	free(OMEGA);
+	free(resid);
+	free(stdx);
+	return 2.0*Tn0/n;
+}
+
+double Huber_multiple_approx0(double *Tns, double *y, double *tx, double *x, double *z, double *resid0, double *alphahat, double *zk, double *mu0, int n, int p, int p2, int p3,
+		int M, double tau, double shape1, double shape2, int maxIter, double tol, int N0){
+	int i,j,s,g,count;
+	double tmp, tmp1, tmp2, tmp3, omega=0.0, Tn, Tn0=0.0, rho, sd, xij;
+	double *resid, *stdx, *yb, *OMEGA, *zmu;
+
+	yb 		= (double*)malloc(sizeof(double)*n);
+	resid 	= (double*)malloc(sizeof(double)*n);
+	zmu 	= (double*)malloc(sizeof(double)*n);
+	stdx 	= (double*)malloc(sizeof(double)*n*p3);
+	OMEGA 	= (double*)malloc(sizeof(double)*n*n);
+
+	for(i=0; i<n; i++){
+		tmp = fabs(resid0[i]);
+		if(tmp>tau){
+			resid0[i] = tau*SGN(resid0[i]);
+		}
+	}
+
+	for(i=0; i<n; i++){
+		sd = 0.0;
+		for(j=0; j<p3; j++){
+			sd += z[j*n+i]*z[j*n+i];
+		}
+		sd = 1.0/sqrt(sd);
+		tmp = 0.0;
+		for(j=0; j<p3; j++){
+			stdx[j*n+i] = z[j*n+i]*sd;
+			tmp += stdx[j*n+i]*mu0[j];
+		}
+		zmu[i] = tmp;
+	}
+
+
+	for (i = 0; i < n-1; i++) {
+		for (j = i+1; j < n; j++) {
+			xij = 0.0;
+			for (s = 0; s < p2; s++) {
+				xij += x[s*n+i]*x[s*n+j];
+			}
+			rho = 0.0;
+			for (s = 0; s < p3; s++) {
+				rho += stdx[s*n+i]*stdx[s*n+j];
+			}
+
+			if(1-rho*rho < MEPS){
+				tmp1 = zmu[j];
+				count = 0;
+				for (s = 0; s < N0; s++) {
+					if(zk[s] < tmp1)
+						count++;
+				}
+				omega = 1.0*count/N0;
+			}
+			else{
+				tmp		= 0.0;
+				tmp1 	= zmu[j];
+				tmp2 	= rho/sqrt(1-rho*rho);
+				tmp3 	= tmp1/sqrt(1-rho*rho);
+				for (s = 0; s < N0; s++) {
+					if(zk[s] < tmp1){
+						tmp += erf(SQRT2*(tmp3 - zk[s]*tmp2)) + 1.0;
+					}
+				}
+				omega = 0.5*tmp/N0;
+			}
+
+			OMEGA[i*n+j]	= omega*xij;
+			Tn0 	+= OMEGA[i*n+j]*resid0[i]*resid0[j];
+		}
+	}
+
+	for(g=0;g<M;g++){
+		Tn = 0.0;
+		for(i=0; i<n; i++){
+			yb[i] = y[g*n+i];
+		}
+		EstHuber2(tx, yb, alphahat, resid, tau, n, p, maxIter, tol);
+		for (i = 0; i < n-1; i++) {
+			for (j = i+1; j < n; j++) {
+				Tn 	+= OMEGA[i*n+j]*resid[i]*resid[j];
+			}
+		}
+
+		Tns[g] = 2.0*Tn/n;
+	}
+
+	free(yb);
+	free(OMEGA);
+	free(resid);
+	free(zmu);
+	free(stdx);
+	return 2.0*Tn0/n;
+}
+
+SEXP _HUBER_WAST0(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESID0, SEXP DIMs, SEXP PARAMs){
+	int n, p1, p2, p3, isBeta, maxIter, M;
+	double tau, shape1, shape2, tol;
+	n 		= INTEGER(DIMs)[0];
+	p1 		= INTEGER(DIMs)[1];
+	p2 		= INTEGER(DIMs)[2];
+	p3 		= INTEGER(DIMs)[3];
+	M 		= INTEGER(DIMs)[4];
+	isBeta 	= INTEGER(DIMs)[5];
+	maxIter = INTEGER(DIMs)[6];
+
+	tau 	= REAL(PARAMs)[0];
+	shape1 	= REAL(PARAMs)[1];
+	shape2 	= REAL(PARAMs)[2];
+	tol 	= REAL(PARAMs)[3];
+
+	SEXP rTn, rTn0, rAlpha, list, list_names;
+	PROTECT(rTn0 		= allocVector(REALSXP, 	1));
+	PROTECT(rTn 		= allocVector(REALSXP, 	M));
+	PROTECT(rAlpha 		= allocVector(REALSXP, 	p1));
+	PROTECT(list_names 	= allocVector(STRSXP, 	3));
+	PROTECT(list 		= allocVector(VECSXP, 	3));
+
+	if(p3==1){
+		REAL(rTn0)[0] = Huber_single(REAL(rTn), REAL(Y), REAL(tX), REAL(X), REAL(Z), REAL(RESID0), REAL(rAlpha),
+						n, p1, p2, M, tau, isBeta, shape1, shape2, maxIter, tol);
+	}
+	else{
+		REAL(rTn0)[0] = Huber_multiple0(REAL(rTn), REAL(Y), REAL(tX), REAL(X), REAL(Z), REAL(RESID0), REAL(rAlpha),
+						n, p1, p2, p3, M, tau, shape1, shape2, maxIter, tol);
+	}
+
+
+	SET_STRING_ELT(list_names, 	0,  mkChar("Tn0"));
+	SET_STRING_ELT(list_names, 	1,  mkChar("Tn"));
+	SET_STRING_ELT(list_names, 	2,  mkChar("coef"));
+	SET_VECTOR_ELT(list, 		0, 	rTn0);
+	SET_VECTOR_ELT(list, 		1, 	rTn);
+	SET_VECTOR_ELT(list, 		2, 	rAlpha);
+	setAttrib(list, R_NamesSymbol, 	list_names);
+
+	UNPROTECT(5);
+	return list;
+}
+
+SEXP _HUBER_WAST_APPROX0(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESID0, SEXP Z_K, SEXP MU0, SEXP DIMs, SEXP PARAMs){
+	int n, p1, p2, p3, isBeta, maxIter, M, N0;
+	double tau, shape1, shape2, tol;
+	n 		= INTEGER(DIMs)[0];
+	p1 		= INTEGER(DIMs)[1];
+	p2 		= INTEGER(DIMs)[2];
+	p3 		= INTEGER(DIMs)[3];
+	M 		= INTEGER(DIMs)[4];
+	isBeta 	= INTEGER(DIMs)[5];
+	maxIter = INTEGER(DIMs)[6];
+	N0 		= INTEGER(DIMs)[7];
+
+	tau 	= REAL(PARAMs)[0];
+	shape1 	= REAL(PARAMs)[1];
+	shape2 	= REAL(PARAMs)[2];
+	tol 	= REAL(PARAMs)[3];
+
+	SEXP rTn, rTn0, rAlpha, list, list_names;
+	PROTECT(rTn0 		= allocVector(REALSXP, 	1));
+	PROTECT(rTn 		= allocVector(REALSXP, 	M));
+	PROTECT(rAlpha 		= allocVector(REALSXP, 	p1));
+	PROTECT(list_names 	= allocVector(STRSXP, 	3));
+	PROTECT(list 		= allocVector(VECSXP, 	3));
+
+	if(p3==1){
+		REAL(rTn0)[0] = Huber_single(REAL(rTn), REAL(Y), REAL(tX), REAL(X),
+						REAL(Z), REAL(RESID0), REAL(rAlpha),
+						n, p1, p2, M, tau, isBeta, shape1, shape2, maxIter, tol);
+	}
+	else{
+		REAL(rTn0)[0] = Huber_multiple_approx0(REAL(rTn), REAL(Y), REAL(tX), REAL(X),
+						REAL(Z), REAL(RESID0), REAL(rAlpha), REAL(Z_K), REAL(MU0),
+						n, p1, p2, p3, M, tau, shape1, shape2, maxIter, tol, N0);
+	}
+
+
+	SET_STRING_ELT(list_names, 	0,  mkChar("Tn0"));
+	SET_STRING_ELT(list_names, 	1,  mkChar("Tn"));
+	SET_STRING_ELT(list_names, 	2,  mkChar("coef"));
+	SET_VECTOR_ELT(list, 		0, 	rTn0);
+	SET_VECTOR_ELT(list, 		1, 	rTn);
+	SET_VECTOR_ELT(list, 		2, 	rAlpha);
+	setAttrib(list, R_NamesSymbol, 	list_names);
+
+	UNPROTECT(5);
+	return list;
+}
+
+//-------------- WAST of robust regression --------------------------------
+double Huber_multiple(double *Tns, double *y, double *tx, double *x, double *z, double *resid0, double *alphahat, int n, int p, int p2, int p3,
+		int M, double tau, double shape1, double shape2, int maxIter, double tol){
+	int i,j,s,g;
+	double omega=0.0, Tn, Tn0=0.0, rho, sd, xij;
+	double *resid, *stdx, *yb, *OMEGA;
+
+	yb 		= (double*)malloc(sizeof(double)*n);
+	resid 	= (double*)malloc(sizeof(double)*n);
+	stdx 	= (double*)malloc(sizeof(double)*n*p3);
+	OMEGA 	= (double*)malloc(sizeof(double)*n*n);
+
+	for(i=0; i<n; i++){
+		yb[i] = y[i];
+	}
+	EstHuber2(tx, yb, alphahat, resid0, tau, n, p, maxIter, tol);
 
 	for(i=0; i<n; i++){
 		sd = 0.0;
@@ -1308,11 +1568,9 @@ double Huber_multiple_approx(double *Tns, double *y, double *tx, double *x, doub
 	OMEGA 	= (double*)malloc(sizeof(double)*n*n);
 
 	for(i=0; i<n; i++){
-		tmp = fabs(resid0[i]);
-		if(tmp>tau){
-			resid0[i] = tau*SGN(resid0[i]);
-		}
+		yb[i] = y[i];
 	}
+	EstHuber2(tx, yb, alphahat, resid0, tau, n, p, maxIter, tol);
 
 	for(i=0; i<n; i++){
 		sd = 0.0;

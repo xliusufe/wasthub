@@ -21,7 +21,7 @@ gam.init = function(n.initials,q,Z,lb.quantile,ub.quantile,ss=1){
 	return(gamma.initials)
 }
 
-EstTn_Huber_sst <- function(data, isAda = TRUE, K = 1000, M = 1000) {
+EstTn_Huber_sst <- function(data, isMed = TRUE, K = 1000, M = 1000) {
 	y 		= data$Y
 	n 		= length(y)
 	tx 		= data$X
@@ -33,7 +33,7 @@ EstTn_Huber_sst <- function(data, isAda = TRUE, K = 1000, M = 1000) {
 	maxIter = 50
 	tol 	= 0.00001
 	tau0 	= 1.345
-	if(isAda){
+	if(isMed){
 		tau1 	= -1
 		tau0 	= tau0/qnorm(0.75)
 	}
@@ -85,7 +85,7 @@ EstTn_Huber_sst <- function(data, isAda = TRUE, K = 1000, M = 1000) {
 	return(pvals)
 }
 
-EstTn_Huber_wast <- function(data, isAda = TRUE, isWB = FALSE, isBeta = 0, shape1 = 1, shape2 = 1, K = 1000, M = 1000) {
+EstTn_Huber_wast0 <- function(data, isMed = TRUE, isWB = FALSE, isBeta = 0, shape1 = 1, shape2 = 1, K = 1000, M = 1000) {
 	y 		= data$Y
 	n 		= length(y)
 	tx 		= data$X
@@ -98,7 +98,7 @@ EstTn_Huber_wast <- function(data, isAda = TRUE, isWB = FALSE, isBeta = 0, shape
 	maxIter = 100
 	tol 	= 0.0001
 	tau0 	= 1.345
-	if(isAda){
+	if(isMed){
 		tau1 	= -1
 		tau0 	= tau0/qnorm(0.75)
 	}
@@ -131,7 +131,72 @@ EstTn_Huber_wast <- function(data, isAda = TRUE, isWB = FALSE, isBeta = 0, shape
 			yb[,k] 	= muhat + resids[sample.int(n, n, replace = TRUE)]
 		}
 	}
+
+	fit <- .Call("_HUBER_WAST0",
+				as.numeric(yb),
+				as.numeric(tx),
+				as.numeric(x),
+				as.numeric(z),
+				as.numeric(resids),
+				as.integer(dims),
+				as.numeric(params)
+			)
+
+	teststat	= fit$Tn0
+	teststat_p	= fit$Tn
+	pvals   	= mean(teststat_p >= teststat)
+
+	return(pvals)
+}
+
+EstTn_Huber_wast <- function(data, isMed = TRUE, isWB = FALSE, isBeta = 0, shape1 = 1, shape2 = 1, K = 1000, M = 1000) {
+	y 		= data$Y
+	n 		= length(y)
+	tx 		= data$X
+	x 		= data$Z
+	z 		= data$U
+	p1 		= ifelse(is.null(ncol(tx)), 1, ncol(tx))
+	p2 		= ifelse(is.null(ncol(x)) , 1, ncol(x))
+	p3 		= ifelse(is.null(ncol(z)) , 1, ncol(z))
+
+	maxIter = 100
+	tol 	= 0.0001
+	tau0 	= 1.345
+	if(isMed){
+		tau1 	= -1
+		tau0 	= tau0/qnorm(0.75)
+	}
+	else{
+		tau1 	= tau0*median( abs(y - median(y)) )/qnorm(0.75)
+	}
+	dims 	= c(n, p1, p2, p3, M, isBeta, maxIter)
+
+
+	fit <- .Call("_EST_HUBER_2step",
+				as.numeric(y),
+				as.numeric(tx),
+				as.integer(c(n,p1,maxIter)),
+				as.numeric(c(tau1, tau0, tol))
+			)
+
+	tau 	= fit$tau
+	muhat 	= tx%*%fit$coef
+	resids 	= y - muhat
+
+	params 	= c(tau, shape1, shape2, tol)
+	yb 		= matrix(0, n, M)
+	if(isWB){
+		for(k in 1:M){
+			yb[,k] 	= muhat + resids*rnorm(n);
+		}
+	}
+	else{
+		for(k in 1:M){
+			yb[,k] 	= muhat + resids[sample.int(n, n, replace = TRUE)]
+		}
+	}
 	yb 	<- cbind(y, yb)
+
 	fit <- .Call("_HUBER_WAST",
 				as.numeric(yb),
 				as.numeric(tx),
@@ -208,6 +273,7 @@ EstTn_Huber_wastCV <- function(data, isWB = FALSE, isBeta = 0, shape1 = 1, shape
 		}
 	}
 	yb 	<- cbind(y, yb)
+
 	fit <- .Call("_HUBER_WAST",
 				as.numeric(yb),
 				as.numeric(tx),
@@ -225,7 +291,7 @@ EstTn_Huber_wastCV <- function(data, isWB = FALSE, isBeta = 0, shape1 = 1, shape
 	return(pvals)
 }
 
-EstTn_Huber_slr <- function(data, isAda = TRUE, K = 1000, M = 1000) {
+EstTn_Huber_slr <- function(data, isMed = TRUE, K = 1000, M = 1000) {
 	y 		= data$Y
 	n 		= length(y)
 	tx 		= data$X
@@ -238,7 +304,7 @@ EstTn_Huber_slr <- function(data, isAda = TRUE, K = 1000, M = 1000) {
 	tol 	= 0.00001
 
 	tau0 	= 1.345
-	if(isAda){
+	if(isMed){
 		tau1 	= -1
 		tau0 	= tau0/qnorm(0.75)
 	}
@@ -289,7 +355,7 @@ EstTn_Huber_slr <- function(data, isAda = TRUE, K = 1000, M = 1000) {
 	return(pvals)
 }
 
-EstTn_Huber_approx <- function(data, isAda = TRUE, isWB = FALSE, isBeta = 0, shape1 = 1, shape2 = 1, M = 1000, N0 = 5000, MU0 = NULL, Z_K = NULL) {
+EstTn_Huber_approx <- function(data, isMed = TRUE, isWB = FALSE, isBeta = 0, shape1 = 1, shape2 = 1, M = 1000, N0 = 5000, MU0 = NULL, Z_K = NULL) {
 	y 		= data$Y
 	n 		= length(y)
 	tx 		= data$X
@@ -302,7 +368,7 @@ EstTn_Huber_approx <- function(data, isAda = TRUE, isWB = FALSE, isBeta = 0, sha
 	maxIter = 100
 	tol 	= 0.0001
 	tau0 	= 1.345
-	if(isAda){
+	if(isMed){
 		tau1 	= -1
 		tau0 	= tau0/qnorm(0.75)
 	}
@@ -365,28 +431,30 @@ EstTn_Huber_approx <- function(data, isAda = TRUE, isWB = FALSE, isBeta = 0, sha
 	return(pvals)
 }
 
-pvalhuber <- function(data, method = "wast", isWB = FALSE, B = 1000, K = 1000, isBeta = FALSE, shape1 = 1, shape2 = 1, N0 = 5000, MU = NULL, ZK = NULL, isMed 	= TRUE){
+pvalhuber <- function(data, method = "wast", isWB = FALSE, B = 1000, K = 1000, isBeta = FALSE, shape1 = 1, shape2 = 1, N0 = 5000, MU = NULL, ZK = NULL, isMed = TRUE){
 	isBeta	= ifelse(isBeta, 1, 0)
-	isAda 	= isMed
 
 	if(method=='wast') {
-	   pvals  	= EstTn_Huber_wast(data, isAda = isAda, isWB = isWB, isBeta = isBeta, shape1 = shape1, shape2 = shape2, K = K, M = B)
+	   pvals  	= EstTn_Huber_wast(data, isMed = isMed, isWB = isWB, isBeta = isBeta, shape1 = shape1, shape2 = shape2, K = K, M = B)
+	}
+	else if(method=='wast0') {
+	   pvals  	= EstTn_Huber_wast0(data, isMed = isMed, isWB = isWB, isBeta = isBeta, shape1 = shape1, shape2 = shape2, K = K, M = B)
 	}
 	else if(method=='sst'){
-		pvals  	= EstTn_Huber_sst(data, isAda = isAda, K = K, M = B)
+		pvals  	= EstTn_Huber_sst(data, isMed = isMed, K = K, M = B)
 	}
 	else if(method=='slrt'){
-		pvals  	= EstTn_Huber_slr(data, isAda = isAda, K = K, M = B)
+		pvals  	= EstTn_Huber_slr(data, isMed = isMed, K = K, M = B)
 	}
 	else if(method=="wastcv"){
 		pvals 	= EstTn_Huber_wastCV(data, isWB = isWB, isBeta = isBeta, shape1 = shape1, shape2 = shape2, K = K, B = B)
 	}
 	else if(method=='wastapprox'){
-		pvals  	= EstTn_Huber_approx(data, isAda = isAda, isWB = isWB, isBeta = isBeta, shape1 = shape1, shape2 = shape2, M = B, N0 = N0, MU0 = MU, Z_K = ZK)
+		pvals  	= EstTn_Huber_approx(data, isMed = isMed, isWB = isWB, isBeta = isBeta, shape1 = shape1, shape2 = shape2, M = B, N0 = N0, MU0 = MU, Z_K = ZK)
 	}
 	else{
 		warning("Input method is not one of {'wast', 'wastcv', 'wastapprox', 'sst', and 'slrt'}. The default method 'wast' is used!")
-		pvals  	= EstTn_Huber_wast(data, isAda = isAda, isWB = isWB, isBeta = isBeta, shape1 = shape1, shape2 = shape2, K = K, M = B)
+		pvals  	= EstTn_Huber_wast(data, isMed = isMed, isWB = isWB, isBeta = isBeta, shape1 = shape1, shape2 = shape2, K = K, M = B)
 	}
 	return(pvals)
 }
