@@ -936,4 +936,132 @@ double EstHuberR(double *x, double *y1, double *beta, double *residual, double q
 	return qq;
 }
 
+double _Omega(double *OMEGA, double *x, double *z, double *resid0, int n, int p2, int p3, int typewgt){
+	int i,j,s;
+	double rho, xij, omega, sd, Tn0=0.0, *stdx;
 
+	stdx 	= (double*)malloc(sizeof(double)*n*p3);
+
+
+	for(i=0; i<n; i++){
+		sd = 0.0;
+		for(j=0; j<p3; j++){
+			sd += z[j*n+i]*z[j*n+i];
+		}
+		sd = 1.0/sqrt(sd);
+		for(j=0; j<p3; j++){
+			stdx[j*n+i] = z[j*n+i]*sd;
+		}
+	}
+
+	if(typewgt==1){
+		for (i = 0; i < n-1; i++) {
+			for (j = i+1; j < n; j++) {
+				xij = 0.0;
+				for (s = 0; s < p2; s++) {
+					xij += x[s*n+i]*x[s*n+j];
+				}
+				rho = 0.0;
+				for (s = 0; s < p3; s++) {
+					rho += stdx[s*n+i]*stdx[s*n+j];
+				}
+
+				if(1-rho*rho < MEPS){
+					omega = 0.5;
+				}
+				else{
+					omega = 0.25 + atan(rho/sqrt(1-rho*rho))*MPI1;
+				}
+				OMEGA[i*n+j]	= omega*xij;
+				Tn0 	+= OMEGA[i*n+j]*resid0[i]*resid0[j];
+			}
+		}
+	}
+	else{
+		for (i = 0; i < n-1; i++) {
+			for (j = i+1; j < n; j++) {
+				xij = 0.0;
+				for (s = 0; s < p2; s++) {
+					xij += x[s*n+i]*x[s*n+j];
+				}
+				rho = 0.0;
+				for (s = 0; s < p3; s++) {
+					rho += stdx[s*n+i]*stdx[s*n+j];
+				}
+				omega = 0.5 - acos(rho)*MPI1;
+				OMEGA[i*n+j]	= omega*xij;
+				Tn0 	+= OMEGA[i*n+j]*resid0[i]*resid0[j];
+			}
+		}
+	}
+
+
+	free(stdx);
+	return Tn0;
+}
+
+double _Omega_approx(double *OMEGA, double *x, double *z, double *mu0, double *zk, double *resid0, int n, int p2, int p3, int N0){
+	int i,j,s, count;
+	double tmp, tmp1, tmp2, tmp3, rho, xij, omega, sd, Tn0=0.0, *stdx, *zmu;
+
+	stdx 	= (double*)malloc(sizeof(double)*n*p3);
+	zmu 	= (double*)malloc(sizeof(double)*n);
+
+
+	for(i=0; i<n; i++){
+		sd = 0.0;
+		for(j=0; j<p3; j++){
+			sd += z[j*n+i]*z[j*n+i];
+		}
+		sd = 1.0/sqrt(sd);
+		tmp = 0.0;
+		for(j=0; j<p3; j++){
+			stdx[j*n+i] = z[j*n+i]*sd;
+			tmp += stdx[j*n+i]*mu0[j];
+		}
+		zmu[i] = tmp;
+	}
+
+	for (i = 0; i < n-1; i++) {
+		for (j = i+1; j < n; j++) {
+			xij = 0.0;
+			for (s = 0; s < p2; s++) {
+				xij += x[s*n+i]*x[s*n+j];
+			}
+			rho = 0.0;
+			for (s = 0; s < p3; s++) {
+				rho += stdx[s*n+i]*stdx[s*n+j];
+			}
+
+			if(1-rho*rho < MEPS){
+				tmp1 = zmu[j];
+				count = 0;
+				for (s = 0; s < N0; s++) {
+					if(zk[s] < tmp1)
+						count++;
+				}
+				omega = 1.0*count/N0;
+			}
+			else{
+				tmp		= 0.0;
+				tmp1 	= zmu[j];
+				tmp2 	= rho/sqrt(1-rho*rho);
+				tmp3 	= tmp1/sqrt(1-rho*rho);
+				for (s = 0; s < N0; s++) {
+					if(zk[s] < tmp1){
+						tmp += erf(SQRT2*(tmp3 - zk[s]*tmp2)) + 1.0;
+					}
+				}
+				omega = 0.5*tmp/N0;
+			}
+			tmp = omega*xij;
+			OMEGA[i*n+j]	= tmp;
+			Tn0 	+= tmp*resid0[i]*resid0[j];
+		}
+	}
+
+
+	free(stdx);
+	free(zmu);
+	return Tn0;
+}

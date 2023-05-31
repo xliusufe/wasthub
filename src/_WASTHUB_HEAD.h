@@ -70,4 +70,8 @@ double EstHuberR1(double *y, double *residual, double tau, const int n);
 
 double EstHuberR(double *x, double *y1, double *beta, double *residual, double qq, double tau0, int n, int p, int maxstep, double eps);
 
+double _Omega(double *OMEGA, double *x, double *z, double *resid0, int n, int p2, int p3, int typewgt);
+
+double _Omega_approx(double *OMEGA, double *x, double *z, double *mu0, double *zk, double *resid0, int n, int p2, int p3, int N0);
+
 #endif // WAST_H_INCLUDED
