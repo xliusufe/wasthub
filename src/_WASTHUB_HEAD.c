@@ -1000,6 +1000,46 @@ double _Omega(double *OMEGA, double *x, double *z, double *resid0, int n, int p2
 	return Tn0;
 }
 
+double _OmegaSingle(double *OMEGA, double *x, double *z, double *resid0, int n, int p2, double shape1, double shape2, int isBeta){
+	int i,j,s;
+	double xij, omega, Tn0=0.0, *ty;
+
+	ty  = (double*)malloc(sizeof(double)*n);
+
+	if(isBeta==1){
+		for(i=0; i<n; i++){
+			ty[i] = incbeta(z[i], shape1, shape2);
+		}
+	}
+	else if(isBeta==0){
+		shape2 *= SQRT2;
+		for(i=0; i<n; i++){
+			ty[i] = 0.5*erf( (z[i] - shape1)*shape2 ) +0.5;
+		}
+	}
+	else{
+		for(i=0; i<n; i++){
+			ty[i] = z[i];
+		}
+	}
+
+	for (i = 0; i < n-1; i++) {
+		for (j = i+1; j < n; j++) {
+			xij = 0.0;
+			for (s = 0; s < p2; s++) {
+				xij += x[s*n+i]*x[s*n+j];
+			}
+			omega 	= (z[i]<z[j])?ty[i]:ty[j];
+			OMEGA[i*n+j]	= omega*xij;
+			Tn0 	+= OMEGA[i*n+j]*resid0[i]*resid0[j];
+		}
+	}
+
+
+	free(ty);
+	return Tn0;
+}
+
 double _Omega_approx(double *OMEGA, double *x, double *z, double *mu0, double *zk, double *resid0, int n, int p2, int p3, int N0){
 	int i,j,s, count;
 	double tmp, tmp1, tmp2, tmp3, rho, xij, omega, sd, Tn0=0.0, *stdx, *zmu;

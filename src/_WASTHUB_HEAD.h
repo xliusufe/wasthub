@@ -72,6 +72,8 @@ double EstHuberR(double *x, double *y1, double *beta, double *residual, double q
 
 double _Omega(double *OMEGA, double *x, double *z, double *resid0, int n, int p2, int p3, int typewgt);
 
+double _OmegaSingle(double *OMEGA, double *x, double *z, double *resid0, int n, int p2, double shape1, double shape2, int isBeta);
+
 double _Omega_approx(double *OMEGA, double *x, double *z, double *mu0, double *zk, double *resid0, int n, int p2, int p3, int N0);
 
 #endif // WAST_H_INCLUDED

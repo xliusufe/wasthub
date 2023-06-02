@@ -585,12 +585,33 @@ double Huber_SST0(double *y, double *tx1, double *x, double *z, double *alphahat
 	return pvals;
 }
 
-double Huber_SST(double *y, double *tx1, double *x, double *z, double *alphahat, double* thetahat, double *resid1,
-		int n, int p11, int p2, int p3, double tau, int maxIter, double tol, int K, int M, double *G, double* theta){
+void Huber_SST(double **data, int *dims, double *params){
 	int i,j,k,s,t, *subg, maxk=0, count=0, sumsb = 0;
-	double tmp, tmp1, Tn=0.0, Tn0=0.0, Tn_star, pvals;
+	int n, p11, p2, p3, K, M;
+	double tau, *pvals, *tx1, *x, *z, *resid1, *theta, *G, *thetahat, *alphahat;
+
+	double tmp, tmp1, Tn=0.0, Tn0=0.0, Tn_star;
 	double *score1, *psi, *psin;
 	double *C11, *psi_h, *K1, *Vh, *Tns, *weight;
+
+	n 		= dims[0];
+	p11		= dims[1];
+	p2 		= dims[2];
+	p3 		= dims[3];
+	K 		= dims[4];
+	M		= dims[5];
+
+	tau 	= params[0];
+
+	pvals	= data[0];
+	tx1		= data[2];
+	x		= data[3];
+	z		= data[4];
+	resid1	= data[5];
+	theta	= data[6];
+	thetahat= data[7];
+	G		= data[8];
+	alphahat= data[9];
 
 	subg	= (int*)malloc(sizeof(int)*n);
 	psin	= (double*)malloc(sizeof(double)*p2);
@@ -613,6 +634,10 @@ double Huber_SST(double *y, double *tx1, double *x, double *z, double *alphahat,
 		else{
 			weight[i] = 1.0;
 		}
+	}
+
+	for (s = 0; s < p11; s++, alphahat++){
+		*alphahat = 0.0;
 	}
 
 
@@ -757,7 +782,7 @@ double Huber_SST(double *y, double *tx1, double *x, double *z, double *alphahat,
 			count++;
 		}
 	}
-	pvals = 1.0*count/M;
+	*pvals = 1.0*count/M;
 	for(j=0; j<p3; j++){
 		thetahat[j] = theta[maxk*p3 + j];
 	}
@@ -772,23 +797,21 @@ double Huber_SST(double *y, double *tx1, double *x, double *z, double *alphahat,
 	free(K1);
 	free(Tns);
 	free(weight);
-	return pvals;
 }
 
 SEXP _HUBER_SST(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESIDS, SEXP THETA, SEXP G, SEXP DIMs, SEXP PARAMs){
-	int n, p1, p2, p3, K, M, maxIter;
-	double tol, tau;
+	int i, p1, p3, dims[7];
+	double params[2], *data[10];
 
-	n 		= INTEGER(DIMs)[0];
-	p1 		= INTEGER(DIMs)[1];
-	p2 		= INTEGER(DIMs)[2];
-	p3 		= INTEGER(DIMs)[3];
-	K 		= INTEGER(DIMs)[4];
-	M 		= INTEGER(DIMs)[5];
-	maxIter = INTEGER(DIMs)[6];
+	for(i=0; i<7; i++){
+		dims[i] = INTEGER(DIMs)[i];
+	}
+	for(i=0; i<2; i++){
+		params[i] = REAL(PARAMs)[i];
+	}
 
-	tau		= REAL(PARAMs)[0];
-	tol 	= REAL(PARAMs)[1];
+	p1 		= dims[1];
+	p3 		= dims[3];
 
 	SEXP rpvals, rAlpha, rthetahat, list, list_names;
   	PROTECT(rpvals 		= allocVector(REALSXP, 	1));
@@ -797,9 +820,19 @@ SEXP _HUBER_SST(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESIDS, SEXP THETA, SEXP G
 	PROTECT(list_names 	= allocVector(STRSXP, 	3));
 	PROTECT(list 		= allocVector(VECSXP, 	3));
 
+	data[0] = REAL(rpvals);
+	data[1] = REAL(Y);
+	data[2] = REAL(tX);
+	data[3] = REAL(X);
+	data[4] = REAL(Z);
+	data[5] = REAL(RESIDS);
+	data[6] = REAL(THETA);
+	data[7] = REAL(rthetahat);
+	data[8] = REAL(G);
+	data[9] = REAL(rAlpha);
 
-	REAL(rpvals)[0] = Huber_SST(REAL(Y), REAL(tX), REAL(X), REAL(Z), REAL(rAlpha), REAL(rthetahat), REAL(RESIDS),
-					n, p1, p2, p3, tau, maxIter, tol, K, M, REAL(G), REAL(THETA));
+	Huber_SST(data, dims, params);
+
 	SET_STRING_ELT(list_names, 	0,  mkChar("pvals"));
 	SET_STRING_ELT(list_names, 	1,  mkChar("alpha"));
 	SET_STRING_ELT(list_names, 	2,	mkChar("theta"));
@@ -813,12 +846,35 @@ SEXP _HUBER_SST(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESIDS, SEXP THETA, SEXP G
 }
 
 //-------------- SLR of robust regression --------------------------------
-void Huber_SLR(double *pvals, double *y, double *tx, double *x, double *z, double *resids, double tau, double *theta, double* G, double *thetahat,
-		int n, int p, int p2, int p3, int K, int M, int maxstep, double tol){
-	int i,j,k,s,t,p11=p+p2,*subg,sumsb=0,count=0,maxk=0;
+void Huber_SLR(double **data,int *dims, double *params){
+	int i,j,k,s,t,*subg,sumsb=0,count=0,maxk=0;
+	int n, p, p2, p3, K, M, p11;
+	double tau, *pvals, *tx, *x, *z, *resids, *theta, *G, *thetahat;
+
 	double tmp1, Tn0;
 	double *psi0, *psi1, *psi2, *psin, *C11, *alpha0, *Tns, *I0, *In, *weight;
 
+	n 		= dims[0];
+	p 		= dims[1];
+	p2 		= dims[2];
+	p3 		= dims[3];
+	K 		= dims[4];
+	M		= dims[5];
+
+	tau 	= params[0];
+
+	pvals	= data[0];
+	tx		= data[2];
+	x		= data[3];
+	z		= data[4];
+	resids	= data[5];
+	theta	= data[6];
+	thetahat= data[7];
+	G		= data[8];
+	
+
+
+	p11		= p+p2;
 	subg	= (int*)malloc(sizeof(int)*n);
 	weight 	= (double*)malloc(sizeof(double)*n);
 	alpha0 	= (double*)malloc(sizeof(double)*p11);
@@ -1004,19 +1060,18 @@ void Huber_SLR(double *pvals, double *y, double *tx, double *x, double *z, doubl
 	free(In);
 }
 
-SEXP _HUBER_SLR(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESIDS, SEXP THETA, SEXP G, SEXP DIMs, SEXP PARAMS){
-	int n, p1, p2, p3, K, M, maxstep;
-	double tol, tau;
-	n 		= INTEGER(DIMs)[0];
-	p1		= INTEGER(DIMs)[1];
-	p2 		= INTEGER(DIMs)[2];
-	p3 		= INTEGER(DIMs)[3];
-	K 		= INTEGER(DIMs)[4];
-	M 		= INTEGER(DIMs)[5];
-	maxstep = INTEGER(DIMs)[6];
+SEXP _HUBER_SLR(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESIDS, SEXP THETA, SEXP G, SEXP DIMs, SEXP PARAMs){
+	int i, p3, dims[7];
+	double params[2], *data[9];
 
-	tau 	= REAL(PARAMS)[0];
-	tol		= REAL(PARAMS)[1];
+	for(i=0; i<7; i++){
+		dims[i] = INTEGER(DIMs)[i];
+	}
+	for(i=0; i<2; i++){
+		params[i] = REAL(PARAMs)[i];
+	}
+
+	p3 		= dims[3];
 
 	SEXP rpvals, rthetahat, list, list_names;
   	PROTECT(rpvals 		= allocVector(REALSXP, 	2));
@@ -1024,8 +1079,17 @@ SEXP _HUBER_SLR(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESIDS, SEXP THETA, SEXP G
 	PROTECT(list 		= allocVector(VECSXP, 	2));
 	PROTECT(list_names 	= allocVector(STRSXP, 	2));
 
-	Huber_SLR(REAL(rpvals), REAL(Y), REAL(tX), REAL(X), REAL(Z), REAL(RESIDS), tau, REAL(THETA), REAL(G), REAL(rthetahat),
-			n, p1, p2, p3, K, M, maxstep, tol);
+	data[0] = REAL(rpvals);
+	data[1] = REAL(Y);
+	data[2] = REAL(tX);
+	data[3] = REAL(X);
+	data[4] = REAL(Z);
+	data[5] = REAL(RESIDS);
+	data[6] = REAL(THETA);
+	data[7] = REAL(rthetahat);
+	data[8] = REAL(G);
+
+	Huber_SLR(data, dims, params);
 
 	SET_STRING_ELT(list_names, 	0,	mkChar("pvals"));
 	SET_STRING_ELT(list_names, 	1,	mkChar("theta"));
@@ -1154,341 +1218,96 @@ void EstHuber2(double *x, double *y, double *beta, double *residual, double qq, 
 	free(qy);
 }
 
-double Huber_single(double *Tns, double *y, double *tx, double *x, double *z, double *resid0, double *alphahat, int n, int p, int p2,
-		int M, double tau, int isBeta, double shape1, double shape2, int maxIter, double tol){
-	int i,j,s,g;
-	double tmp, omega=0.0, Tn, Tn0=0.0, xij;
-	double *ty, *resid, *yb, *OMEGA;
-
-	yb 		= (double*)malloc(sizeof(double)*n);
-	OMEGA 	= (double*)malloc(sizeof(double)*n*n);
-	resid 	= (double*)malloc(sizeof(double)*n);
-	ty  	= (double*)malloc(sizeof(double)*n);
-
-	for(i=0; i<n; i++){
-		tmp = fabs(resid0[i]);
-		if(tmp>tau){
-			resid0[i] = tau*SGN(resid0[i]);
-		}
-	}
-	if(isBeta==1){
-		for(i=0; i<n; i++){
-			ty[i] = incbeta(z[i], shape1, shape2);
-		}
-	}
-	else if(isBeta==0){
-		shape2 *= SQRT2;
-		for(i=0; i<n; i++){
-			ty[i] = 0.5*erf( (z[i] - shape1)*shape2 ) +0.5;
-		}
-	}
-	else{
-		for(i=0; i<n; i++){
-			ty[i] = z[i];
-		}
-	}
-
-	for (i = 0; i < n-1; i++) {
-		for (j = i+1; j < n; j++) {
-			xij = 0.0;
-			for (s = 0; s < p2; s++) {
-				xij += x[s*n+i]*x[s*n+j];
-			}
-			omega 	= (z[i]<z[j])?ty[i]:ty[j];
-			OMEGA[i*n+j]	= omega*xij;
-			Tn0 	+= OMEGA[i*n+j]*resid0[i]*resid0[j];
-		}
-	}
-
-	for(g=0;g<M;g++){
-		Tn = 0.0;
-		for(i=0; i<n; i++){
-			yb[i] = y[g*n+i];
-		}
-		EstHuber2(tx, yb, alphahat, resid, tau, n, p, maxIter, tol);
-		for (i = 0; i < n-1; i++) {
-			for (j = i+1; j < n; j++) {
-				Tn 	+= OMEGA[i*n+j]*resid[i]*resid[j];
-			}
-		}
-
-		Tns[g] = 2.0*Tn/n;
-	}
-
-	free(yb);
-	free(OMEGA);
-	free(resid);
-	free(ty);
-	return 2.0*Tn0/n;
-}
-
-double Huber_multiple0(double *Tns, double *y, double *tx, double *x, double *z, double *resid0, double *alphahat, int n, int p, int p2, int p3,
-		int M, double tau, double shape1, double shape2, int maxIter, double tol){
-	int i,j,s,g;
-	double tmp, omega=0.0, Tn, Tn0=0.0, rho, sd, xij;
-	double *resid, *stdx, *yb, *OMEGA;
-
-	yb 		= (double*)malloc(sizeof(double)*n);
-	resid 	= (double*)malloc(sizeof(double)*n);
-	stdx 	= (double*)malloc(sizeof(double)*n*p3);
-	OMEGA 	= (double*)malloc(sizeof(double)*n*n);
-
-	for(i=0; i<n; i++){
-		tmp = fabs(resid0[i]);
-		if(tmp>tau){
-			resid0[i] = tau*SGN(resid0[i]);
-		}
-	}
-
-	for(i=0; i<n; i++){
-		sd = 0.0;
-		for(j=0; j<p3; j++){
-			sd += z[j*n+i]*z[j*n+i];
-		}
-		sd = 1.0/sqrt(sd);
-		for(j=0; j<p3; j++){
-			stdx[j*n+i] = z[j*n+i]*sd;
-		}
-	}
-
-	for (i = 0; i < n-1; i++) {
-		for (j = i+1; j < n; j++) {
-			xij = 0.0;
-			for (s = 0; s < p2; s++) {
-				xij += x[s*n+i]*x[s*n+j];
-			}
-			rho = 0.0;
-			for (s = 0; s < p3; s++) {
-				rho += stdx[s*n+i]*stdx[s*n+j];
-			}
-
-			if(1-rho*rho < MEPS){
-				omega = 0.5;
-			}
-			else{
-				omega = 0.25 + atan(rho/sqrt(1-rho*rho))*MPI1;
-			}
-			OMEGA[i*n+j]	= omega*xij;
-			Tn0 	+= OMEGA[i*n+j]*resid0[i]*resid0[j];
-		}
-	}
-
-	for(g=0;g<M;g++){
-		Tn = 0.0;
-		for(i=0; i<n; i++){
-			yb[i] = y[g*n+i];
-		}
-		EstHuber2(tx, yb, alphahat, resid, tau, n, p, maxIter, tol);
-		for (i = 0; i < n-1; i++) {
-			for (j = i+1; j < n; j++) {
-				Tn 	+= OMEGA[i*n+j]*resid[i]*resid[j];
-			}
-		}
-
-		Tns[g] = 2.0*Tn/n;
-	}
-
-	free(yb);
-	free(OMEGA);
-	free(resid);
-	free(stdx);
-	return 2.0*Tn0/n;
-}
-
-double Huber_multiple_approx0(double *Tns, double *y, double *tx, double *x, double *z, double *resid0, double *alphahat, double *zk, double *mu0, int n, int p, int p2, int p3,
-		int M, double tau, double shape1, double shape2, int maxIter, double tol, int N0){
-	int i,j,s,g,count;
-	double tmp, tmp1, tmp2, tmp3, omega=0.0, Tn, Tn0=0.0, rho, sd, xij;
-	double *resid, *stdx, *yb, *OMEGA, *zmu;
-
-	yb 		= (double*)malloc(sizeof(double)*n);
-	resid 	= (double*)malloc(sizeof(double)*n);
-	zmu 	= (double*)malloc(sizeof(double)*n);
-	stdx 	= (double*)malloc(sizeof(double)*n*p3);
-	OMEGA 	= (double*)malloc(sizeof(double)*n*n);
-
-	for(i=0; i<n; i++){
-		tmp = fabs(resid0[i]);
-		if(tmp>tau){
-			resid0[i] = tau*SGN(resid0[i]);
-		}
-	}
-
-	for(i=0; i<n; i++){
-		sd = 0.0;
-		for(j=0; j<p3; j++){
-			sd += z[j*n+i]*z[j*n+i];
-		}
-		sd = 1.0/sqrt(sd);
-		tmp = 0.0;
-		for(j=0; j<p3; j++){
-			stdx[j*n+i] = z[j*n+i]*sd;
-			tmp += stdx[j*n+i]*mu0[j];
-		}
-		zmu[i] = tmp;
-	}
-
-
-	for (i = 0; i < n-1; i++) {
-		for (j = i+1; j < n; j++) {
-			xij = 0.0;
-			for (s = 0; s < p2; s++) {
-				xij += x[s*n+i]*x[s*n+j];
-			}
-			rho = 0.0;
-			for (s = 0; s < p3; s++) {
-				rho += stdx[s*n+i]*stdx[s*n+j];
-			}
-
-			if(1-rho*rho < MEPS){
-				tmp1 = zmu[j];
-				count = 0;
-				for (s = 0; s < N0; s++) {
-					if(zk[s] < tmp1)
-						count++;
-				}
-				omega = 1.0*count/N0;
-			}
-			else{
-				tmp		= 0.0;
-				tmp1 	= zmu[j];
-				tmp2 	= rho/sqrt(1-rho*rho);
-				tmp3 	= tmp1/sqrt(1-rho*rho);
-				for (s = 0; s < N0; s++) {
-					if(zk[s] < tmp1){
-						tmp += erf(SQRT2*(tmp3 - zk[s]*tmp2)) + 1.0;
-					}
-				}
-				omega = 0.5*tmp/N0;
-			}
-
-			OMEGA[i*n+j]	= omega*xij;
-			Tn0 	+= OMEGA[i*n+j]*resid0[i]*resid0[j];
-		}
-	}
-
-	for(g=0;g<M;g++){
-		Tn = 0.0;
-		for(i=0; i<n; i++){
-			yb[i] = y[g*n+i];
-		}
-		EstHuber2(tx, yb, alphahat, resid, tau, n, p, maxIter, tol);
-		for (i = 0; i < n-1; i++) {
-			for (j = i+1; j < n; j++) {
-				Tn 	+= OMEGA[i*n+j]*resid[i]*resid[j];
-			}
-		}
-
-		Tns[g] = 2.0*Tn/n;
-	}
-
-	free(yb);
-	free(OMEGA);
-	free(resid);
-	free(zmu);
-	free(stdx);
-	return 2.0*Tn0/n;
-}
-
-SEXP _HUBER_WAST0(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESID0, SEXP DIMs, SEXP PARAMs){
-	int n, p1, p2, p3, isBeta, maxIter, M;
-	double tau, shape1, shape2, tol;
-	n 		= INTEGER(DIMs)[0];
-	p1 		= INTEGER(DIMs)[1];
-	p2 		= INTEGER(DIMs)[2];
-	p3 		= INTEGER(DIMs)[3];
-	M 		= INTEGER(DIMs)[4];
-	isBeta 	= INTEGER(DIMs)[5];
-	maxIter = INTEGER(DIMs)[6];
-
-	tau 	= REAL(PARAMs)[0];
-	shape1 	= REAL(PARAMs)[1];
-	shape2 	= REAL(PARAMs)[2];
-	tol 	= REAL(PARAMs)[3];
-
-	SEXP rTn, rTn0, rAlpha, list, list_names;
-	PROTECT(rTn0 		= allocVector(REALSXP, 	1));
-	PROTECT(rTn 		= allocVector(REALSXP, 	M));
-	PROTECT(rAlpha 		= allocVector(REALSXP, 	p1));
-	PROTECT(list_names 	= allocVector(STRSXP, 	3));
-	PROTECT(list 		= allocVector(VECSXP, 	3));
-
-	if(p3==1){
-		REAL(rTn0)[0] = Huber_single(REAL(rTn), REAL(Y), REAL(tX), REAL(X), REAL(Z), REAL(RESID0), REAL(rAlpha),
-						n, p1, p2, M, tau, isBeta, shape1, shape2, maxIter, tol);
-	}
-	else{
-		REAL(rTn0)[0] = Huber_multiple0(REAL(rTn), REAL(Y), REAL(tX), REAL(X), REAL(Z), REAL(RESID0), REAL(rAlpha),
-						n, p1, p2, p3, M, tau, shape1, shape2, maxIter, tol);
-	}
-
-
-	SET_STRING_ELT(list_names, 	0,  mkChar("Tn0"));
-	SET_STRING_ELT(list_names, 	1,  mkChar("Tn"));
-	SET_STRING_ELT(list_names, 	2,  mkChar("coef"));
-	SET_VECTOR_ELT(list, 		0, 	rTn0);
-	SET_VECTOR_ELT(list, 		1, 	rTn);
-	SET_VECTOR_ELT(list, 		2, 	rAlpha);
-	setAttrib(list, R_NamesSymbol, 	list_names);
-
-	UNPROTECT(5);
-	return list;
-}
-
-SEXP _HUBER_WAST_APPROX0(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESID0, SEXP Z_K, SEXP MU0, SEXP DIMs, SEXP PARAMs){
-	int n, p1, p2, p3, isBeta, maxIter, M, N0;
-	double tau, shape1, shape2, tol;
-	n 		= INTEGER(DIMs)[0];
-	p1 		= INTEGER(DIMs)[1];
-	p2 		= INTEGER(DIMs)[2];
-	p3 		= INTEGER(DIMs)[3];
-	M 		= INTEGER(DIMs)[4];
-	isBeta 	= INTEGER(DIMs)[5];
-	maxIter = INTEGER(DIMs)[6];
-	N0 		= INTEGER(DIMs)[7];
-
-	tau 	= REAL(PARAMs)[0];
-	shape1 	= REAL(PARAMs)[1];
-	shape2 	= REAL(PARAMs)[2];
-	tol 	= REAL(PARAMs)[3];
-
-	SEXP rTn, rTn0, rAlpha, list, list_names;
-	PROTECT(rTn0 		= allocVector(REALSXP, 	1));
-	PROTECT(rTn 		= allocVector(REALSXP, 	M));
-	PROTECT(rAlpha 		= allocVector(REALSXP, 	p1));
-	PROTECT(list_names 	= allocVector(STRSXP, 	3));
-	PROTECT(list 		= allocVector(VECSXP, 	3));
-
-	if(p3==1){
-		REAL(rTn0)[0] = Huber_single(REAL(rTn), REAL(Y), REAL(tX), REAL(X),
-						REAL(Z), REAL(RESID0), REAL(rAlpha),
-						n, p1, p2, M, tau, isBeta, shape1, shape2, maxIter, tol);
-	}
-	else{
-		REAL(rTn0)[0] = Huber_multiple_approx0(REAL(rTn), REAL(Y), REAL(tX), REAL(X),
-						REAL(Z), REAL(RESID0), REAL(rAlpha), REAL(Z_K), REAL(MU0),
-						n, p1, p2, p3, M, tau, shape1, shape2, maxIter, tol, N0);
-	}
-
-
-	SET_STRING_ELT(list_names, 	0,  mkChar("Tn0"));
-	SET_STRING_ELT(list_names, 	1,  mkChar("Tn"));
-	SET_STRING_ELT(list_names, 	2,  mkChar("coef"));
-	SET_VECTOR_ELT(list, 		0, 	rTn0);
-	SET_VECTOR_ELT(list, 		1, 	rTn);
-	SET_VECTOR_ELT(list, 		2, 	rAlpha);
-	setAttrib(list, R_NamesSymbol, 	list_names);
-
-	UNPROTECT(5);
-	return list;
-}
-
-//-------------- WAST of robust regression --------------------------------
-double Huber_multiple(double *Tns, double *y, double *tx, double *x, double *z, double *resid0, double *alphahat, int n, int p, int p2, int p3,
-		int M, double tau, double shape1, double shape2, int maxIter, double tol, int typewgt){
+double Huber_single(double **data, int *dims, double *params){
 	int i,j,g;
+	int n, p, p2, M, isBeta, maxIter;
+	double tau, shape1, shape2, tol;
+	double *Tns, *y, *tx, *x, *z, *resid0, *alphahat;
+
+	double tmp, Tn, Tn0=0.0;
+	double *resid, *yb, *OMEGA;
+
+
+	n 		= dims[0];
+	p 		= dims[1];
+	p2 		= dims[2];
+	M 		= dims[4];
+	isBeta 	= dims[5];
+	maxIter = dims[6];
+
+	tau 	= params[0];
+	tol 	= params[1];
+	shape1 	= params[2];
+	shape2 	= params[3];
+
+	Tns		= data[0];
+	y		= data[1];
+	tx		= data[2];
+	x		= data[3];
+	z		= data[4];
+	resid0	= data[5];
+	alphahat= data[6];
+
+	yb 		= (double*)malloc(sizeof(double)*n);
+	OMEGA 	= (double*)malloc(sizeof(double)*n*n);
+	resid 	= (double*)malloc(sizeof(double)*n);
+
+	for(i=0; i<n; i++){
+		tmp = fabs(resid0[i]);
+		if(tmp>tau){
+			resid0[i] = tau*SGN(resid0[i]);
+		}
+	}
+
+	Tn0 = _OmegaSingle(OMEGA, x, z, resid0, n, p2, shape1, shape2, isBeta);
+
+	for(g=0;g<M;g++){
+		Tn = 0.0;
+		for(i=0; i<n; i++){
+			yb[i] = y[g*n+i];
+		}
+		EstHuber2(tx, yb, alphahat, resid, tau, n, p, maxIter, tol);
+		for (i = 0; i < n-1; i++) {
+			for (j = i+1; j < n; j++) {
+				Tn 	+= OMEGA[i*n+j]*resid[i]*resid[j];
+			}
+		}
+
+		Tns[g] = 2.0*Tn/n;
+	}
+
+	free(yb);
+	free(OMEGA);
+	free(resid);
+	return 2.0*Tn0/n;
+}
+
+double Huber_multiple(double **data, int *dims, double *params){
+	int i,j,g;
+	int n, p, p2, p3, M, maxIter, typewgt;
+	double tau, tol, *Tns, *y, *tx, *x, *z, *resid0, *alphahat;
+
 	double Tn, Tn0=0.0;
 	double *resid, *yb, *OMEGA;
+
+	n 		= dims[0];
+	p 		= dims[1];
+	p2 		= dims[2];
+	p3 		= dims[3];
+	M 		= dims[4];
+	maxIter = dims[6];
+	typewgt	= dims[7];
+
+	tau 	= params[0];
+	tol 	= params[1];
+
+	Tns		= data[0];
+	y		= data[1];
+	tx		= data[2];
+	x		= data[3];
+	z		= data[4];
+	resid0	= data[5];
+	alphahat= data[6];
 
 	yb 		= (double*)malloc(sizeof(double)*n);
 	resid 	= (double*)malloc(sizeof(double)*n);
@@ -1522,11 +1341,34 @@ double Huber_multiple(double *Tns, double *y, double *tx, double *x, double *z, 
 	return 2.0*Tn0/n;
 }
 
-double Huber_multiple_approx(double *Tns, double *y, double *tx, double *x, double *z, double *resid0, double *alphahat, double *zk, double *mu0, int n, int p, int p2, int p3,
-		int M, double tau, double shape1, double shape2, int maxIter, double tol, int N0){
+double Huber_multiple_approx(double **data, int *dims, double *params){
 	int i,j,g;
+	int n, p, p2, p3, M, maxIter, N0;
+	double tau, tol, *Tns, *y, *tx, *x, *z, *resid0, *alphahat, *zk, *mu0;
+
 	double Tn, Tn0=0.0;
 	double *resid, *yb, *OMEGA;
+
+	n 		= dims[0];
+	p 		= dims[1];
+	p2 		= dims[2];
+	p3 		= dims[3];
+	M 		= dims[4];
+	maxIter = dims[6];
+	N0		= dims[7];
+
+	tau 	= params[0];
+	tol 	= params[1];
+
+	Tns		= data[0];
+	y		= data[1];
+	tx		= data[2];
+	x		= data[3];
+	z		= data[4];
+	resid0	= data[5];
+	alphahat= data[6];
+	zk		= data[7];
+	mu0		= data[8];
 
 	yb 		= (double*)malloc(sizeof(double)*n);
 	resid 	= (double*)malloc(sizeof(double)*n);
@@ -1561,21 +1403,19 @@ double Huber_multiple_approx(double *Tns, double *y, double *tx, double *x, doub
 }
 
 SEXP _HUBER_WAST(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESID0, SEXP DIMs, SEXP PARAMs){
-	int n, p1, p2, p3, isBeta, maxIter, M, typewgt;
-	double tau, shape1, shape2, tol;
-	n 		= INTEGER(DIMs)[0];
-	p1 		= INTEGER(DIMs)[1];
-	p2 		= INTEGER(DIMs)[2];
-	p3 		= INTEGER(DIMs)[3];
-	M 		= INTEGER(DIMs)[4];
-	isBeta 	= INTEGER(DIMs)[5];
-	maxIter = INTEGER(DIMs)[6];
-	typewgt	= INTEGER(DIMs)[7];
+	int i, p1, p3, M, dims[8];
+	double params[4], *data[7];
 
-	tau 	= REAL(PARAMs)[0];
-	shape1 	= REAL(PARAMs)[1];
-	shape2 	= REAL(PARAMs)[2];
-	tol 	= REAL(PARAMs)[3];
+	for(i=0; i<8; i++){
+		dims[i] = INTEGER(DIMs)[i];
+	}
+	for(i=0; i<4; i++){
+		params[i] = REAL(PARAMs)[i];
+	}
+
+	p1 		= dims[1];
+	p3 		= dims[3];
+	M 		= dims[4];
 
 	SEXP rTn, rTn0, rAlpha, list, list_names;
 	PROTECT(rTn0 		= allocVector(REALSXP, 	1));
@@ -1584,13 +1424,19 @@ SEXP _HUBER_WAST(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESID0, SEXP DIMs, SEXP P
 	PROTECT(list_names 	= allocVector(STRSXP, 	3));
 	PROTECT(list 		= allocVector(VECSXP, 	3));
 
+	data[0] = REAL(rTn);
+	data[1] = REAL(Y);
+	data[2] = REAL(tX);
+	data[3] = REAL(X);
+	data[4] = REAL(Z);
+	data[5] = REAL(RESID0);
+	data[6] = REAL(rAlpha);
+
 	if(p3==1){
-		REAL(rTn0)[0] = Huber_single(REAL(rTn), REAL(Y), REAL(tX), REAL(X), REAL(Z), REAL(RESID0), REAL(rAlpha),
-						n, p1, p2, M, tau, isBeta, shape1, shape2, maxIter, tol);
+		REAL(rTn0)[0] = Huber_single(data, dims, params);
 	}
 	else{
-		REAL(rTn0)[0] = Huber_multiple(REAL(rTn), REAL(Y), REAL(tX), REAL(X), REAL(Z), REAL(RESID0), REAL(rAlpha),
-						n, p1, p2, p3, M, tau, shape1, shape2, maxIter, tol, typewgt);
+		REAL(rTn0)[0] = Huber_multiple(data, dims, params);
 	}
 
 
@@ -1607,21 +1453,19 @@ SEXP _HUBER_WAST(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESID0, SEXP DIMs, SEXP P
 }
 
 SEXP _HUBER_WAST_APPROX(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESID0, SEXP Z_K, SEXP MU0, SEXP DIMs, SEXP PARAMs){
-	int n, p1, p2, p3, isBeta, maxIter, M, N0;
-	double tau, shape1, shape2, tol;
-	n 		= INTEGER(DIMs)[0];
-	p1 		= INTEGER(DIMs)[1];
-	p2 		= INTEGER(DIMs)[2];
-	p3 		= INTEGER(DIMs)[3];
-	M 		= INTEGER(DIMs)[4];
-	isBeta 	= INTEGER(DIMs)[5];
-	maxIter = INTEGER(DIMs)[6];
-	N0 		= INTEGER(DIMs)[7];
+	int i, p1, p3, M, dims[8];
+	double params[4], *data[9];
 
-	tau 	= REAL(PARAMs)[0];
-	shape1 	= REAL(PARAMs)[1];
-	shape2 	= REAL(PARAMs)[2];
-	tol 	= REAL(PARAMs)[3];
+	for(i=0; i<8; i++){
+		dims[i] = INTEGER(DIMs)[i];
+	}
+	for(i=0; i<4; i++){
+		params[i] = REAL(PARAMs)[i];
+	}
+
+	p1 		= dims[1];
+	p3 		= dims[3];
+	M 		= dims[4];
 
 	SEXP rTn, rTn0, rAlpha, list, list_names;
 	PROTECT(rTn0 		= allocVector(REALSXP, 	1));
@@ -1630,15 +1474,21 @@ SEXP _HUBER_WAST_APPROX(SEXP Y, SEXP tX, SEXP X, SEXP Z, SEXP RESID0, SEXP Z_K, 
 	PROTECT(list_names 	= allocVector(STRSXP, 	3));
 	PROTECT(list 		= allocVector(VECSXP, 	3));
 
+	data[0] = REAL(rTn);
+	data[1] = REAL(Y);
+	data[2] = REAL(tX);
+	data[3] = REAL(X);
+	data[4] = REAL(Z);
+	data[5] = REAL(RESID0);
+	data[6] = REAL(rAlpha);
+	data[7] = REAL(Z_K);
+	data[8] = REAL(MU0);
+
 	if(p3==1){
-		REAL(rTn0)[0] = Huber_single(REAL(rTn), REAL(Y), REAL(tX), REAL(X),
-						REAL(Z), REAL(RESID0), REAL(rAlpha),
-						n, p1, p2, M, tau, isBeta, shape1, shape2, maxIter, tol);
+		REAL(rTn0)[0] = Huber_single(data, dims, params);
 	}
 	else{
-		REAL(rTn0)[0] = Huber_multiple_approx(REAL(rTn), REAL(Y), REAL(tX), REAL(X),
-						REAL(Z), REAL(RESID0), REAL(rAlpha), REAL(Z_K), REAL(MU0),
-						n, p1, p2, p3, M, tau, shape1, shape2, maxIter, tol, N0);
+		REAL(rTn0)[0] = Huber_multiple_approx(data, dims, params);
 	}
 
 

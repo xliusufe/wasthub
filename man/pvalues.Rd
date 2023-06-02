@@ -8,8 +8,8 @@
 }
 
 \usage{
-  pvalhuber(data, method = "wast", isWB = FALSE, B = 1000, K = 1000, typewgt = 1,
-        isBeta = FALSE, shape1 = 1, shape2 = 1, N0 = 5000, MU = NULL, ZK = NULL, isMed = TRUE)
+  pvalhuber(data, method = "wast", isWB = FALSE, B = 1000, K = 1000, isBeta = FALSE,
+        shape1 = 1, shape2 = 1, N0 = 5000, MU = NULL, ZK = NULL, isMed = TRUE)
 }
 
 \arguments{
@@ -22,8 +22,6 @@
   \item{B}{An integer, the number of bootstrap samples.}
 
   \item{K}{An integer, the number of threshold values for 'sst' and 'slrt' (Default is \code{K = 1000}), or the length of preset \eqn{\tau} for 'wastcv' (Default is \code{K = 100}).}
-
-  \item{typewgt}{An integer. The standard multivariate normal density is chosen as the grouping parameter \eqn{\theta}'s' weight if \code{typewgt = 1}; and uniform distribution on \eqn{S^{q-1}} is chosen otherwise. Default is \code{typewgt = 1}.}
 
   \item{isBeta}{A bool value. The weight \eqn{w(\gamma)} is chosen to be Beta distribution if \code{isBeta = TRUE}, which can be used if the grouping difference variable is bounded in \eqn{[0,1]}. Default is \code{FALSE}.}
 

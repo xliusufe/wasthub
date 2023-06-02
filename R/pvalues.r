@@ -119,7 +119,7 @@ EstTn_Huber_wast <- function(data, isMed = TRUE, isWB = FALSE, typewgt = 1, isBe
 	muhat 	= tx%*%fit$coef
 	resids 	= y - muhat
 
-	params 	= c(tau, shape1, shape2, tol)
+	params 	= c(tau, tol, shape1, shape2)
 	yb 		= matrix(0, n, M)
 	if(isWB){
 		for(k in 1:M){
@@ -196,7 +196,7 @@ EstTn_Huber_wastCV <- function(data, isWB = FALSE, typewgt = 1, isBeta = 0, shap
 	resids 	= y1 - muhat
 
 	dims 	= c(n, p1, p2, p3, M, isBeta, maxIter, typewgt)
-	params 	= c(tau, shape1, shape2, tol)
+	params 	= c(tau, tol, shape1, shape2)
 	yb = matrix(0, n, B)
 	if(isWB){
 		for(k in 1:B){
@@ -311,7 +311,7 @@ EstTn_Huber_approx <- function(data, isMed = TRUE, isWB = FALSE, isBeta = 0, sha
 	else{
 		tau1 	= tau0*median( abs(y - median(y)) )/qnorm(0.75)
 	}
-	dims 	= c(n, p1, p2, p3, M, isBeta, maxIter)
+	dims 	= c(n, p1, p2, p3, M, isBeta, maxIter, N0)
 
 
 	fit <- .Call("_EST_HUBER_2step",
@@ -326,7 +326,7 @@ EstTn_Huber_approx <- function(data, isMed = TRUE, isWB = FALSE, isBeta = 0, sha
 	muhat 	= tx%*%alphahat
 	resids 	= y - muhat
 
-	params 	= c(tau, shape1, shape2, tol)
+	params 	= c(tau, tol, shape1, shape2)
 	yb = matrix(0, n, M)
 	if(isWB){
 		for(k in 1:M){
@@ -347,7 +347,6 @@ EstTn_Huber_approx <- function(data, isMed = TRUE, isWB = FALSE, isBeta = 0, sha
 		Z_K		= rnorm(N0)
 	}
 
-	dims = c(dims, N0)
 	fit <- .Call("_HUBER_WAST_APPROX",
 				as.numeric(yb),
 				as.numeric(tx),
@@ -367,8 +366,9 @@ EstTn_Huber_approx <- function(data, isMed = TRUE, isWB = FALSE, isBeta = 0, sha
 	return(pvals)
 }
 
-pvalhuber <- function(data, method = "wast", isWB = FALSE, B = 1000, K = 1000, typewgt = 1, isBeta = FALSE, shape1 = 1, shape2 = 1, N0 = 5000, MU = NULL, ZK = NULL, isMed = TRUE){
+pvalhuber <- function(data, method = "wast", isWB = FALSE, B = 1000, K = 1000, isBeta = FALSE, shape1 = 1, shape2 = 1, N0 = 5000, MU = NULL, ZK = NULL, isMed = TRUE){
 	isBeta	= ifelse(isBeta, 1, 0)
+	typewgt = 1
 
 	if(method=='wast') {
 	   pvals  	= EstTn_Huber_wast(data, isMed = isMed, isWB = isWB, typewgt = typewgt, isBeta = isBeta, shape1 = shape1, shape2 = shape2, K = K, M = B)
@@ -387,7 +387,7 @@ pvalhuber <- function(data, method = "wast", isWB = FALSE, B = 1000, K = 1000, t
 	}
 	else{
 		warning("Input method is not one of {'wast', 'wastcv', 'wastapprox', 'sst', and 'slrt'}. The default method 'wast' is used!")
-		pvals  	= EstTn_Huber_wast(data, isMed = isMed, isWB = isWB, isBeta = isBeta, shape1 = shape1, shape2 = shape2, K = K, M = B)
+		pvals  	= EstTn_Huber_wast(data, isMed = isMed, isWB = isWB, typewgt = typewgt, isBeta = isBeta, shape1 = shape1, shape2 = shape2, K = K, M = B)
 	}
 	return(pvals)
 }
